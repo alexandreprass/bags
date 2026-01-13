@@ -1,104 +1,96 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Bags.fm Token Deploy (Corrigido)</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bags.fm Deploy – FIX FINAL</title>
 
-  <style>
-    body { font-family: Arial, sans-serif; max-width: 720px; margin: 40px auto; padding: 20px; }
-    label { display: block; margin: 12px 0 4px; font-weight: bold; }
-    input, textarea, button { width: 100%; padding: 10px; margin-bottom: 10px; }
-    button { background: #007bff; color: #fff; border: none; font-size: 16px; cursor: pointer; }
-    button:disabled { background: #aaa; }
-    #status {
-      margin-top: 20px;
-      padding: 15px;
-      background: #f0f8ff;
-      border-radius: 8px;
-      white-space: pre-wrap;
-      font-family: monospace;
-      max-height: 500px;
-      overflow-y: auto;
-    }
-    .error { background: #ffebee; color: #c62828; }
-  </style>
+<style>
+body { font-family: Arial; max-width: 720px; margin: 40px auto; padding: 20px }
+label { display:block; margin-top:12px; font-weight:bold }
+input, textarea, button { width:100%; padding:10px; margin-top:4px }
+button { background:#007bff; color:#fff; border:none; cursor:pointer }
+button:disabled { background:#aaa }
+#status { margin-top:20px; padding:15px; background:#f0f8ff; white-space:pre-wrap; font-family:monospace; max-height:500px; overflow:auto }
+.error { background:#ffebee; color:#c62828 }
+</style>
 
-  <script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
-  <script src="https://unpkg.com/bs58@5.0.0/dist/index.min.js"></script>
+<script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
+<script src="https://unpkg.com/bs58@5.0.0/dist/index.min.js"></script>
 </head>
 
 <body>
 
-<h1>Deploy Token no Bags.fm</h1>
+<h2>Deploy Token Bags.fm</h2>
 
-<button id="connectWalletBtn">Conectar Phantom</button>
-<p id="walletStatus">Wallet: não conectada</p>
+<button id="connectBtn">Conectar Phantom</button>
+<p id="walletStatus">Wallet: desconectada</p>
 
-<form id="tokenForm">
-  <label>API Key (bags.fm)</label>
-  <input id="apiKey" required>
+<form id="form">
+  <label>API Key</label>
+  <input id="apiKeyInput" required>
 
-  <label>Nome do Token</label>
-  <input id="name" required>
+  <label>Nome</label>
+  <input id="nameInput" required>
 
   <label>Símbolo</label>
-  <input id="symbol" maxlength="8" required>
+  <input id="symbolInput" maxlength="8" required>
 
   <label>Descrição</label>
-  <textarea id="description" rows="3"></textarea>
+  <textarea id="descriptionInput"></textarea>
 
   <label>Imagem</label>
-  <input type="file" id="imageFile" accept="image/*" required>
+  <input type="file" id="imageInput" accept="image/*" required>
 
   <label>Compra inicial (SOL)</label>
-  <input type="number" id="initialBuy" step="0.001" value="0">
+  <input type="number" id="initialBuyInput" step="0.001" value="0">
 
-  <button id="submitBtn" disabled>Criar e Deploy</button>
+  <button id="deployBtn" disabled>Deploy</button>
 </form>
 
 <div id="status">Aguardando ação...</div>
 
 <script>
 const { Connection, PublicKey, Transaction, LAMPORTS_PER_SOL } = solanaWeb3;
-const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
+const connection = new Connection("https://api.mainnet-beta.solana.com");
 
-let provider, publicKey;
+let provider, wallet;
 
 const statusDiv = document.getElementById("status");
-const walletStatus = document.getElementById("walletStatus");
-const submitBtn = document.getElementById("submitBtn");
-
-function log(msg, error=false) {
-  statusDiv.innerHTML += "\n" + msg;
-  if (error) statusDiv.classList.add("error");
+function log(msg, err=false){
+  statusDiv.textContent += "\n" + msg;
+  if(err) statusDiv.classList.add("error");
   statusDiv.scrollTop = statusDiv.scrollHeight;
 }
 
-document.getElementById("connectWalletBtn").onclick = async () => {
+document.getElementById("connectBtn").onclick = async () => {
   provider = window.phantom?.solana;
-  if (!provider) return log("❌ Phantom não detectada", true);
+  if(!provider) return log("❌ Phantom não encontrada", true);
 
   await provider.connect();
-  publicKey = new PublicKey(provider.publicKey.toString());
-  walletStatus.innerText = `Wallet: ${publicKey.toBase58()}`;
-  submitBtn.disabled = false;
+  wallet = provider.publicKey;
+  document.getElementById("walletStatus").innerText = "Wallet: " + wallet.toBase58();
+  document.getElementById("deployBtn").disabled = false;
   log("✅ Wallet conectada");
 };
 
-document.getElementById("tokenForm").onsubmit = async (e) => {
+document.getElementById("form").onsubmit = async (e) => {
   e.preventDefault();
 
   try {
-    const apiKey = apiKey.value.trim();
-    const name = name.value.trim();
-    const symbol = symbol.value.trim().toUpperCase();
-    const description = description.value.trim() || "Token";
-    const image = imageFile.files[0];
-    const initialBuyLamports = Math.floor((+initialBuy.value || 0) * LAMPORTS_PER_SOL);
+    const apiKey = document.getElementById("apiKeyInput").value.trim();
+    const name = document.getElementById("nameInput").value.trim();
+    const symbol = document.getElementById("symbolInput").value.trim().toUpperCase();
+    const description = document.getElementById("descriptionInput").value.trim() || "Token";
+    const image = document.getElementById("imageInput").files[0];
+    const initialBuyLamports =
+      Math.floor((+document.getElementById("initialBuyInput").value || 0) * LAMPORTS_PER_SOL);
 
-    /* PASSO 1 — METADATA */
-    log("🚀 Passo 1: Criando metadata...");
+    if(!apiKey || !name || !symbol || !image)
+      throw new Error("Campos obrigatórios faltando");
+
+    /* PASSO 1 */
+    log("Passo 1: Criando metadata...");
     const fd = new FormData();
     fd.append("name", name);
     fd.append("symbol", symbol);
@@ -107,62 +99,54 @@ document.getElementById("tokenForm").onsubmit = async (e) => {
 
     const infoRes = await fetch(
       "https://public-api-v2.bags.fm/api/v1/token-launch/create-token-info",
-      { method: "POST", headers: { "x-api-key": apiKey }, body: fd }
+      { method:"POST", headers:{ "x-api-key": apiKey }, body:fd }
     );
 
     const info = await infoRes.json();
-    if (!info.success) throw info;
+    if(!info.success) throw info;
 
     const tokenMint = info.response.tokenMint;
     const metadataUrl = info.response.tokenMetadata;
+    log("Mint: " + tokenMint);
 
-    log("✅ Mint: " + tokenMint);
-
-    /* PASSO 2 — FEE CONFIG (CORRIGIDO) */
-    log("⚙️ Passo 2: Configurando fee share...");
-
-    const feeBody = {
-      launchWallet: publicKey.toBase58(),
-      tokenMint: tokenMint,
-      feeShare: [
-        { wallet: publicKey.toBase58(), bps: 10000 }
-      ]
-    };
-
+    /* PASSO 2 */
+    log("Passo 2: Fee config...");
     const feeRes = await fetch(
       "https://public-api-v2.bags.fm/api/v1/token-launch/create-config",
       {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "x-api-key":apiKey
         },
-        body: JSON.stringify(feeBody)
+        body: JSON.stringify({
+          launchWallet: wallet.toBase58(),
+          tokenMint,
+          feeShare:[{ wallet: wallet.toBase58(), bps:10000 }]
+        })
       }
     );
 
     const feeData = await feeRes.json();
-    if (!feeRes.ok) throw feeData;
+    if(!feeRes.ok) throw feeData;
 
     const feeTx = Transaction.from(bs58.decode(feeData.response));
     const signedFee = await provider.signTransaction(feeTx);
-    const feeSig = await connection.sendRawTransaction(signedFee.serialize());
-    await connection.confirmTransaction(feeSig);
-    log("✅ Fee config tx: " + feeSig);
+    await connection.sendRawTransaction(signedFee.serialize());
+    log("Fee OK");
 
-    /* PASSO 3 — LAUNCH */
-    log("🔥 Passo 3: Launch token...");
-
+    /* PASSO 3 */
+    log("Passo 3: Launch...");
     const launchRes = await fetch(
       "https://public-api-v2.bags.fm/api/v1/token-launch/create-launch-transaction",
       {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "x-api-key":apiKey
         },
         body: JSON.stringify({
-          payer: publicKey.toBase58(),
+          payer: wallet.toBase58(),
           tokenMint,
           metadataUrl,
           initialBuyLamports
@@ -171,19 +155,18 @@ document.getElementById("tokenForm").onsubmit = async (e) => {
     );
 
     const launchData = await launchRes.json();
-    if (!launchRes.ok) throw launchData;
+    if(!launchRes.ok) throw launchData;
 
     const launchTx = Transaction.from(bs58.decode(launchData.response));
     const signedLaunch = await provider.signTransaction(launchTx);
     const sig = await connection.sendRawTransaction(signedLaunch.serialize());
-    await connection.confirmTransaction(sig);
 
-    log("🎉 DEPLOY CONCLUÍDO!");
+    log("🎉 DEPLOY FINALIZADO");
     log("TX: " + sig);
     log("https://bags.fm/" + tokenMint);
 
-  } catch (err) {
-    log("❌ ERRO:\n" + JSON.stringify(err, null, 2), true);
+  } catch(err) {
+    log("❌ ERRO REAL:\n" + (err.message || JSON.stringify(err, null, 2)), true);
   }
 };
 </script>
