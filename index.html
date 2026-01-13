@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bags.fm Token Deploy – Estável</title>
+<title>Bags.fm Token Deploy – Robust</title>
 
 <style>
 body { font-family: Arial, sans-serif; max-width: 760px; margin: 40px auto; padding: 20px }
@@ -30,13 +30,13 @@ button:disabled { background:#aaa }
 
 <body>
 
-<h2>Deploy Token no Bags.fm (Modo Estável)</h2>
+<h2>Deploy Token no Bags.fm (Robusto)</h2>
 
 <button id="connectBtn">Conectar Phantom</button>
 <p id="walletStatus">Wallet: não conectada</p>
 
 <form id="deployForm">
-  <label>API Key (bags.fm)</label>
+  <label>API Key</label>
   <input id="apiKeyInput" required>
 
   <label>Nome do Token</label>
@@ -48,7 +48,7 @@ button:disabled { background:#aaa }
   <label>Descrição</label>
   <textarea id="descriptionInput"></textarea>
 
-  <label>Imagem (PNG/JPG)</label>
+  <label>Imagem</label>
   <input type="file" id="imageInput" accept="image/*" required>
 
   <label>Compra inicial (SOL)</label>
@@ -67,16 +67,28 @@ let provider = null;
 let walletPubkey = null;
 
 const statusDiv = document.getElementById("status");
-function log(msg, isError=false) {
+function log(msg, err=false){
   statusDiv.textContent += "\n" + msg;
-  if (isError) statusDiv.classList.add("error");
+  if(err) statusDiv.classList.add("error");
   statusDiv.scrollTop = statusDiv.scrollHeight;
 }
 
-/* CONNECT WALLET */
+async function safeFetchJson(res) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(
+      "Resposta NÃO JSON do Bags.fm:\n\n" +
+      text.slice(0, 800)
+    );
+  }
+}
+
+/* CONNECT */
 document.getElementById("connectBtn").onclick = async () => {
   provider = window.phantom?.solana;
-  if (!provider) return log("❌ Phantom não detectada", true);
+  if (!provider) return log("❌ Phantom não encontrada", true);
 
   await provider.connect();
   walletPubkey = provider.publicKey;
@@ -93,78 +105,72 @@ document.getElementById("deployForm").onsubmit = async (e) => {
   e.preventDefault();
 
   try {
-    const apiKey = document.getElementById("apiKeyInput").value.trim();
-    const tokenName = document.getElementById("nameInput").value.trim();
-    const tokenSymbol = document.getElementById("symbolInput").value.trim().toUpperCase();
-    const tokenDescription =
-      document.getElementById("descriptionInput").value.trim() || "Token";
-    const imageFile = document.getElementById("imageInput").files[0];
+    const apiKey = apiKeyInput.value.trim();
+    const tokenName = nameInput.value.trim();
+    const tokenSymbol = symbolInput.value.trim().toUpperCase();
+    const tokenDescription = descriptionInput.value.trim() || "Token";
+    const imageFile = imageInput.files[0];
     const initialBuyLamports =
-      Math.floor((+document.getElementById("initialBuyInput").value || 0) * LAMPORTS_PER_SOL);
+      Math.floor((+initialBuyInput.value || 0) * LAMPORTS_PER_SOL);
 
-    if (!apiKey || !tokenName || !tokenSymbol || !imageFile)
-      throw new Error("Campos obrigatórios não preenchidos");
+    if(!apiKey || !tokenName || !tokenSymbol || !imageFile)
+      throw new Error("Campos obrigatórios faltando");
 
-    /* PASSO 1 — METADATA */
+    /* PASSO 1 */
     log("Passo 1: Criando metadata...");
-    const formData = new FormData();
-    formData.append("name", tokenName);
-    formData.append("symbol", tokenSymbol);
-    formData.append("description", tokenDescription);
-    formData.append("image", imageFile);
+    const fd = new FormData();
+    fd.append("name", tokenName);
+    fd.append("symbol", tokenSymbol);
+    fd.append("description", tokenDescription);
+    fd.append("image", imageFile);
 
     const infoRes = await fetch(
       "https://public-api-v2.bags.fm/api/v1/token-launch/create-token-info",
-      { method: "POST", headers: { "x-api-key": apiKey }, body: formData }
+      { method:"POST", headers:{ "x-api-key":apiKey }, body:fd }
     );
 
-    const infoData = await infoRes.json();
-    if (!infoRes.ok || !infoData.success) throw infoData;
+    const info = await safeFetchJson(infoRes);
+    if(!info.success) throw info;
 
-    const tokenMint = infoData.response.tokenMint;
-    const metadataUrl = infoData.response.tokenMetadata;
-
+    const tokenMint = info.response.tokenMint;
+    const metadataUrl = info.response.tokenMetadata;
     log("✅ Mint: " + tokenMint);
 
-    /* PASSO 2 — LAUNCH (SEM CONFIG) */
+    /* PASSO 2 */
     log("Passo 2: Launch token...");
     const launchRes = await fetch(
       "https://public-api-v2.bags.fm/api/v1/token-launch/create-launch-transaction",
       {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "x-api-key":apiKey
         },
         body: JSON.stringify({
           payer: walletPubkey.toBase58(),
-          tokenMint: tokenMint,
-          metadataUrl: metadataUrl,
-          initialBuyLamports: initialBuyLamports
+          tokenMint,
+          metadataUrl,
+          initialBuyLamports
         })
       }
     );
 
-    const launchData = await launchRes.json();
-    if (!launchRes.ok || !launchData.success) throw launchData;
+    const launch = await safeFetchJson(launchRes);
+    if(!launch.success) throw launch;
 
-    const launchTx = Transaction.from(bs58.decode(launchData.response));
+    const launchTx = Transaction.from(bs58.decode(launch.response));
     const signedLaunch = await provider.signTransaction(launchTx);
-    const launchSig = await connection.sendRawTransaction(
+    const sig = await connection.sendRawTransaction(
       signedLaunch.serialize()
     );
-    await connection.confirmTransaction(launchSig, "confirmed");
+    await connection.confirmTransaction(sig, "confirmed");
 
-    log("🎉 DEPLOY CONCLUÍDO!");
-    log("TX: " + launchSig);
-    log("Bags: https://bags.fm/" + tokenMint);
+    log("🎉 DEPLOY CONCLUÍDO");
+    log("TX: " + sig);
+    log("https://bags.fm/" + tokenMint);
 
-  } catch (err) {
-    log(
-      "❌ ERRO:\n" +
-      (err?.message || JSON.stringify(err, null, 2)),
-      true
-    );
+  } catch(err) {
+    log("❌ ERRO REAL:\n" + err.message, true);
   }
 };
 </script>
