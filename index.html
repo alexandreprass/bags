@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>Bags.fm Token Deploy (ROBUSTO - v2 Fee Share CORRIGIDO)</title>
+  <title>Bags.fm Token Deploy (v2 Fee Share - CORRIGIDO 500)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
   <script src="https://unpkg.com/bs58@5.0.0/dist/index.min.js"></script>
@@ -17,7 +17,7 @@
   </style>
 </head>
 <body>
-<h2>Deploy Token no Bags.fm (v2 - Fee Share via /fee-share/config)</h2>
+<h2>Deploy Token no Bags.fm (v2 - Fee Share com baseMint)</h2>
 <button id="connect">Conectar Phantom</button>
 <p id="wallet">Wallet: desconectada</p>
 <form id="form">
@@ -65,14 +65,15 @@ async function fetchWithRetry(url, options, retries = 5) {
     try {
       const res = await fetch(url, options);
       const text = await res.text();
+      log(`Tentativa ${i+1} - Status: ${res.status} - Body preview: ${text.substring(0, 150)}...`);
       try {
         const json = JSON.parse(text);
-        if (!res.ok) throw new Error(json.message || `HTTP ${res.status}: ${text}`);
+        if (!res.ok) throw new Error(json.message || json.error || `HTTP ${res.status}`);
         return json;
-      } catch {
-        log(`⚠️ Resposta NÃO JSON (tentativa ${i+1}): ${text.slice(0,200)}...`, true);
-        if (i === retries - 1) throw new Error(text);
-        await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+      } catch (parseErr) {
+        log(`⚠️ Não JSON (tentativa ${i+1}): ${text}`, true);
+        if (i === retries - 1) throw new Error(`Resposta final: ${text}`);
+        await new Promise(r => setTimeout(r, 2000 * (i + 1)));
       }
     } catch (err) {
       if (i === retries - 1) throw err;
@@ -104,7 +105,6 @@ document.getElementById("form").onsubmit = async e => {
     const creatorBps = parseInt(creatorBpsInput.value) || 10000;
 
     if (!apiKey || !name || !symbol || !image) throw new Error("Campos obrigatórios não preenchidos");
-    if (creatorBps < 0 || creatorBps > 10000) throw new Error("BPS inválido (0-10000)");
 
     log("Passo 1: Criando metadata...");
     const fd = new FormData();
@@ -119,63 +119,66 @@ document.getElementById("form").onsubmit = async e => {
     );
     const mintStr = meta.response.tokenMint;
     const metadataUrl = meta.response.tokenMetadata;
-    const mint = new PublicKey(mintStr);
     log("✅ Mint: " + mintStr);
 
-    log("Passo 1.5: Criando Fee Share Config transaction...");
+    log("Passo 1.5: Criando Fee Share Config transaction (com baseMint)...");
     const feeShareBody = {
       payer: wallet.toBase58(),
+      baseMint: mintStr,  // ← ESSENCIAL! Resolve provável causa do 500
       feeClaimers: [{
-        user: wallet.toBase58(),  // ou "wallet"
+        user: wallet.toBase58(),
         userBps: creatorBps
-      }],
-      // opcional: baseMint: mintStr, tipWallet: "...", tipLamports: 10000
+      }]
+      // opcional: tipWallet, tipLamports
     };
 
-    const configTxRes = await fetchWithRetry(
-      "https://public-api-v2.bags.fm/api/v1/fee-share/config",  // endpoint corrigido (principal das docs)
+    let configEndpoint = "https://public-api-v2.bags.fm/api/v1/fee-share/config";
+    let configTxRes = await fetchWithRetry(
+      configEndpoint,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey
-        },
+        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
         body: JSON.stringify(feeShareBody)
       }
     );
 
-    // Assume response é { success: true, response: base58 tx }
-    const configTx = Transaction.from(bs58.decode(configTxRes.response));
-    const signedConfigTx = await provider.signTransaction(configTx);
-    const configSig = await connection.sendRawTransaction(signedConfigTx.serialize());
-    await connection.confirmTransaction(configSig, "confirmed");
-    log("✅ Fee Share Config tx enviada e confirmada: " + configSig);
+    // Se der 404/500 persistente, descomente e teste este alternativo:
+    // configEndpoint = "https://public-api-v2.bags.fm/api/v1/token-launch/fee-share/create-config";
+    // configTxRes = await fetchWithRetry(... mesmo body);
 
-    // Derivar configKey (PDA) - seeds comuns baseados em docs/program
+    let serializedTx = configTxRes.response;  // assume direto base58
+    if (configTxRes.response && configTxRes.response.transaction) {
+      serializedTx = configTxRes.response.transaction;
+    }
+    log("Tx serializada recebida (preview): " + serializedTx.substring(0, 50) + "...");
+
+    const configTx = Transaction.from(bs58.decode(serializedTx));
+    const signedConfigTx = await provider.signTransaction(configTx);
+    const configSig = await connection.sendRawTransaction(signedConfigTx.serialize(), { skipPreflight: false });
+    await connection.confirmTransaction(configSig, "confirmed");
+    log("✅ Fee Share Config tx confirmada: " + configSig);
+
+    // Derivar PDA configKey
     const [configKeyPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("fee_share_config"), mint.toBuffer()],
+      [Buffer.from("fee_share_config"), new PublicKey(mintStr).toBuffer()],
       FEE_SHARE_PROGRAM_ID
     );
     const configKey = configKeyPda.toBase58();
-    log("✅ Fee Share Config Key derivado: " + configKey);
-
-    // Alternativa se não funcionar: teste /token-launch/fee-share/create-config se der erro 404
+    log("✅ Config Key (PDA): " + configKey);
 
     log("Passo 2: Criando launch transaction...");
     const launch = await fetchWithRetry(
       "https://public-api-v2.bags.fm/api/v1/token-launch/create-launch-transaction",
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey
-        },
+        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
         body: JSON.stringify({
           tokenMint: mintStr,
           metadataUrl: metadataUrl,
           payer: wallet.toBase58(),
           initialBuyLamports: buyLamports,
-          configKey: configKey  // agora passado!
+          configKey: configKey
+          // opcional: tipWallet, tipLamports
         })
       }
     );
@@ -185,11 +188,11 @@ document.getElementById("form").onsubmit = async e => {
     const launchSig = await connection.sendRawTransaction(signedLaunch.serialize());
     await connection.confirmTransaction(launchSig, "confirmed");
 
-    log("✅ DEPLOY CONCLUÍDO");
+    log("✅ DEPLOY CONCLUÍDO!");
     log("Launch Tx: " + launchSig);
     log("Token: https://bags.fm/" + mintStr);
   } catch (err) {
-    log("❌ ERRO REAL:\n" + (err.message || err), true);
+    log("❌ ERRO REAL: " + (err.message || err.stack || err), true);
   }
 };
 </script>
