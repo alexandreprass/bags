@@ -3,19 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bags.fm Token Deploy – Robust</title>
+<title>Bags.fm Deploy – Resiliente</title>
 
 <style>
-body { font-family: Arial, sans-serif; max-width: 760px; margin: 40px auto; padding: 20px }
+body { font-family: Arial; max-width: 760px; margin: 40px auto; padding: 20px }
 label { display:block; margin-top:12px; font-weight:bold }
 input, textarea, button { width:100%; padding:10px; margin-top:4px }
-button { background:#007bff; color:#fff; border:none; cursor:pointer; font-size:16px }
+button { background:#007bff; color:#fff; border:none; font-size:16px; cursor:pointer }
 button:disabled { background:#aaa }
 #status {
   margin-top:20px;
   padding:15px;
   background:#f0f8ff;
-  border-radius:8px;
   white-space:pre-wrap;
   font-family:monospace;
   max-height:500px;
@@ -30,16 +29,16 @@ button:disabled { background:#aaa }
 
 <body>
 
-<h2>Deploy Token no Bags.fm (Robusto)</h2>
+<h2>Bags.fm Token Deploy (Resiliente)</h2>
 
 <button id="connectBtn">Conectar Phantom</button>
 <p id="walletStatus">Wallet: não conectada</p>
 
-<form id="deployForm">
+<form id="form">
   <label>API Key</label>
   <input id="apiKeyInput" required>
 
-  <label>Nome do Token</label>
+  <label>Nome</label>
   <input id="nameInput" required>
 
   <label>Símbolo</label>
@@ -61,83 +60,75 @@ button:disabled { background:#aaa }
 
 <script>
 const { Connection, Transaction, LAMPORTS_PER_SOL } = solanaWeb3;
-const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
+const connection = new Connection("https://api.mainnet-beta.solana.com");
 
-let provider = null;
-let walletPubkey = null;
-
+let provider, wallet;
 const statusDiv = document.getElementById("status");
+
 function log(msg, err=false){
   statusDiv.textContent += "\n" + msg;
   if(err) statusDiv.classList.add("error");
   statusDiv.scrollTop = statusDiv.scrollHeight;
 }
 
-async function safeFetchJson(res) {
+async function fetchJsonSafe(res){
   const text = await res.text();
   try {
     return JSON.parse(text);
   } catch {
     throw new Error(
-      "Resposta NÃO JSON do Bags.fm:\n\n" +
-      text.slice(0, 800)
+      "Backend Bags.fm indisponível (HTML 500 / Cloudflare)\n\n" +
+      "Tente novamente em alguns minutos."
     );
   }
 }
 
-/* CONNECT */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
 document.getElementById("connectBtn").onclick = async () => {
   provider = window.phantom?.solana;
-  if (!provider) return log("❌ Phantom não encontrada", true);
-
+  if(!provider) return log("❌ Phantom não encontrada", true);
   await provider.connect();
-  walletPubkey = provider.publicKey;
-
-  document.getElementById("walletStatus").innerText =
-    "Wallet: " + walletPubkey.toBase58();
-
+  wallet = provider.publicKey;
+  document.getElementById("walletStatus").innerText = wallet.toBase58();
   document.getElementById("deployBtn").disabled = false;
   log("✅ Wallet conectada");
 };
 
-/* DEPLOY */
-document.getElementById("deployForm").onsubmit = async (e) => {
+document.getElementById("form").onsubmit = async e => {
   e.preventDefault();
 
   try {
     const apiKey = apiKeyInput.value.trim();
-    const tokenName = nameInput.value.trim();
-    const tokenSymbol = symbolInput.value.trim().toUpperCase();
-    const tokenDescription = descriptionInput.value.trim() || "Token";
-    const imageFile = imageInput.files[0];
-    const initialBuyLamports =
+    const name = nameInput.value.trim();
+    const symbol = symbolInput.value.trim().toUpperCase();
+    const desc = descriptionInput.value.trim() || "Token";
+    const image = imageInput.files[0];
+    const buyLamports =
       Math.floor((+initialBuyInput.value || 0) * LAMPORTS_PER_SOL);
 
-    if(!apiKey || !tokenName || !tokenSymbol || !imageFile)
-      throw new Error("Campos obrigatórios faltando");
-
-    /* PASSO 1 */
     log("Passo 1: Criando metadata...");
     const fd = new FormData();
-    fd.append("name", tokenName);
-    fd.append("symbol", tokenSymbol);
-    fd.append("description", tokenDescription);
-    fd.append("image", imageFile);
+    fd.append("name", name);
+    fd.append("symbol", symbol);
+    fd.append("description", desc);
+    fd.append("image", image);
 
     const infoRes = await fetch(
       "https://public-api-v2.bags.fm/api/v1/token-launch/create-token-info",
       { method:"POST", headers:{ "x-api-key":apiKey }, body:fd }
     );
 
-    const info = await safeFetchJson(infoRes);
+    const info = await fetchJsonSafe(infoRes);
     if(!info.success) throw info;
 
-    const tokenMint = info.response.tokenMint;
-    const metadataUrl = info.response.tokenMetadata;
+    const { tokenMint, tokenMetadata } = info.response;
     log("✅ Mint: " + tokenMint);
 
-    /* PASSO 2 */
-    log("Passo 2: Launch token...");
+    log("⏳ Aguardando backend estabilizar...");
+    await sleep(3000);
+
+    log("Passo 2: Tentando launch...");
     const launchRes = await fetch(
       "https://public-api-v2.bags.fm/api/v1/token-launch/create-launch-transaction",
       {
@@ -147,30 +138,27 @@ document.getElementById("deployForm").onsubmit = async (e) => {
           "x-api-key":apiKey
         },
         body: JSON.stringify({
-          payer: walletPubkey.toBase58(),
+          payer: wallet.toBase58(),
           tokenMint,
-          metadataUrl,
-          initialBuyLamports
+          metadataUrl: tokenMetadata,
+          initialBuyLamports: buyLamports
         })
       }
     );
 
-    const launch = await safeFetchJson(launchRes);
+    const launch = await fetchJsonSafe(launchRes);
     if(!launch.success) throw launch;
 
-    const launchTx = Transaction.from(bs58.decode(launch.response));
-    const signedLaunch = await provider.signTransaction(launchTx);
-    const sig = await connection.sendRawTransaction(
-      signedLaunch.serialize()
-    );
-    await connection.confirmTransaction(sig, "confirmed");
+    const tx = Transaction.from(bs58.decode(launch.response));
+    const signed = await provider.signTransaction(tx);
+    const sig = await connection.sendRawTransaction(signed.serialize());
 
-    log("🎉 DEPLOY CONCLUÍDO");
+    log("🎉 DEPLOY ENVIADO");
     log("TX: " + sig);
     log("https://bags.fm/" + tokenMint);
 
   } catch(err) {
-    log("❌ ERRO REAL:\n" + err.message, true);
+    log("❌ " + err.message, true);
   }
 };
 </script>
