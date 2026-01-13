@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bags.fm Token Deploy – Final</title>
+<title>Bags.fm Token Deploy – Estável</title>
 
 <style>
 body { font-family: Arial, sans-serif; max-width: 760px; margin: 40px auto; padding: 20px }
@@ -30,7 +30,7 @@ button:disabled { background:#aaa }
 
 <body>
 
-<h2>Deploy Token no Bags.fm</h2>
+<h2>Deploy Token no Bags.fm (Modo Estável)</h2>
 
 <button id="connectBtn">Conectar Phantom</button>
 <p id="walletStatus">Wallet: não conectada</p>
@@ -60,7 +60,7 @@ button:disabled { background:#aaa }
 <div id="status">Aguardando ação...</div>
 
 <script>
-const { Connection, PublicKey, Transaction, LAMPORTS_PER_SOL } = solanaWeb3;
+const { Connection, Transaction, LAMPORTS_PER_SOL } = solanaWeb3;
 const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
 
 let provider = null;
@@ -80,6 +80,7 @@ document.getElementById("connectBtn").onclick = async () => {
 
   await provider.connect();
   walletPubkey = provider.publicKey;
+
   document.getElementById("walletStatus").innerText =
     "Wallet: " + walletPubkey.toBase58();
 
@@ -87,7 +88,7 @@ document.getElementById("connectBtn").onclick = async () => {
   log("✅ Wallet conectada");
 };
 
-/* DEPLOY FLOW */
+/* DEPLOY */
 document.getElementById("deployForm").onsubmit = async (e) => {
   e.preventDefault();
 
@@ -104,7 +105,7 @@ document.getElementById("deployForm").onsubmit = async (e) => {
     if (!apiKey || !tokenName || !tokenSymbol || !imageFile)
       throw new Error("Campos obrigatórios não preenchidos");
 
-    /* PASSO 1 — CREATE TOKEN INFO */
+    /* PASSO 1 — METADATA */
     log("Passo 1: Criando metadata...");
     const formData = new FormData();
     formData.append("name", tokenName);
@@ -125,36 +126,8 @@ document.getElementById("deployForm").onsubmit = async (e) => {
 
     log("✅ Mint: " + tokenMint);
 
-    /* PASSO 2 — CREATE CONFIG (CORRETO) */
-    log("Passo 2: Fee config...");
-    const configRes = await fetch(
-      "https://public-api-v2.bags.fm/api/v1/token-launch/create-config",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey
-        },
-        body: JSON.stringify({
-          launchWallet: walletPubkey.toBase58()
-        })
-      }
-    );
-
-    const configData = await configRes.json();
-    if (!configRes.ok || !configData.success) throw configData;
-
-    const configTx = Transaction.from(bs58.decode(configData.response));
-    const signedConfig = await provider.signTransaction(configTx);
-    const configSig = await connection.sendRawTransaction(
-      signedConfig.serialize()
-    );
-    await connection.confirmTransaction(configSig, "confirmed");
-
-    log("✅ Fee config OK: " + configSig);
-
-    /* PASSO 3 — LAUNCH TOKEN */
-    log("Passo 3: Launch token...");
+    /* PASSO 2 — LAUNCH (SEM CONFIG) */
+    log("Passo 2: Launch token...");
     const launchRes = await fetch(
       "https://public-api-v2.bags.fm/api/v1/token-launch/create-launch-transaction",
       {
@@ -182,7 +155,7 @@ document.getElementById("deployForm").onsubmit = async (e) => {
     );
     await connection.confirmTransaction(launchSig, "confirmed");
 
-    log("🎉 DEPLOY CONCLUÍDO COM SUCESSO!");
+    log("🎉 DEPLOY CONCLUÍDO!");
     log("TX: " + launchSig);
     log("Bags: https://bags.fm/" + tokenMint);
 
