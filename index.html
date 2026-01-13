@@ -74,6 +74,14 @@ const log = (msg, err=false) => {
   if (err) status.className = "error";
 };
 
+// 🔗 Inputs CORRETAMENTE definidos
+const apiKeyInput = document.getElementById("apiKey");
+const nameInput   = document.getElementById("name");
+const symbolInput = document.getElementById("symbol");
+const descInput   = document.getElementById("desc");
+const imageInput  = document.getElementById("image");
+const buyInput    = document.getElementById("buy");
+
 async function fetchWithRetry(url, options, retries = 5) {
   for (let i = 0; i < retries; i++) {
     const res = await fetch(url, options);
@@ -84,7 +92,7 @@ async function fetchWithRetry(url, options, retries = 5) {
       if (!res.ok) throw json;
       return json;
     } catch {
-      log(`⚠️ Resposta NÃO JSON (tentativa ${i+1})`);
+      log(`⚠️ Resposta NÃO JSON (tentativa ${i + 1})`);
       if (i === retries - 1) {
         throw new Error("Resposta inválida do servidor:\n" + text.slice(0, 500));
       }
@@ -96,9 +104,13 @@ async function fetchWithRetry(url, options, retries = 5) {
 document.getElementById("connect").onclick = async () => {
   provider = window.phantom?.solana;
   if (!provider) return log("Phantom não detectada", true);
+
   await provider.connect();
   wallet = provider.publicKey;
-  document.getElementById("wallet").innerText = "Wallet: " + wallet.toBase58();
+
+  document.getElementById("wallet").innerText =
+    "Wallet: " + wallet.toBase58();
+
   document.getElementById("deploy").disabled = false;
   log("✅ Wallet conectada");
 };
@@ -106,14 +118,21 @@ document.getElementById("connect").onclick = async () => {
 document.getElementById("form").onsubmit = async e => {
   e.preventDefault();
   status.innerHTML = "";
+  status.className = "";
 
   try {
-    const apiKey = apiKeyInput.value;
-    const name = nameInput.value;
-    const symbol = symbolInput.value.toUpperCase();
-    const desc = descInput.value;
+    const apiKey = apiKeyInput.value.trim();
+    const name = nameInput.value.trim();
+    const symbol = symbolInput.value.trim().toUpperCase();
+    const desc = descInput.value.trim();
     const image = imageInput.files[0];
-    const buyLamports = Math.floor((+buyInput.value || 0) * LAMPORTS_PER_SOL);
+    const buyLamports = Math.floor(
+      (parseFloat(buyInput.value) || 0) * LAMPORTS_PER_SOL
+    );
+
+    if (!apiKey || !name || !symbol || !image) {
+      throw new Error("Campos obrigatórios não preenchidos");
+    }
 
     log("Passo 1: Criando metadata...");
 
@@ -130,6 +149,7 @@ document.getElementById("form").onsubmit = async e => {
 
     const mint = meta.response.tokenMint;
     const metadataUrl = meta.response.tokenMetadata;
+
     log("✅ Mint: " + mint);
 
     log("Passo 2: Criando launch transaction...");
