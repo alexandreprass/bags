@@ -2,12 +2,10 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>Bags.fm Token Deploy (ROBUSTO)</title>
+  <title>Bags.fm Token Deploy (ROBUSTO - v2 com Fee Share)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-
   <script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
   <script src="https://unpkg.com/bs58@5.0.0/dist/index.min.js"></script>
-
   <style>
     body { font-family: Arial; max-width: 720px; margin: 40px auto; padding: 20px; }
     label { font-weight: bold; margin-top: 12px; display: block; }
@@ -30,72 +28,66 @@
     .error { background: #ffe6e6; }
   </style>
 </head>
-
 <body>
-<h2>Deploy Token no Bags.fm (com retry)</h2>
-
+<h2>Deploy Token no Bags.fm (v2 - com Fee Share obrigatório)</h2>
 <button id="connect">Conectar Phantom</button>
 <p id="wallet">Wallet: desconectada</p>
-
 <form id="form">
   <label>API Key</label>
   <input id="apiKey" required>
-
   <label>Nome</label>
   <input id="name" required>
-
   <label>Símbolo</label>
   <input id="symbol" maxlength="8" required>
-
   <label>Descrição (obrigatória)</label>
   <textarea id="desc" placeholder="Descrição do token"></textarea>
-
   <label>Imagem</label>
   <input type="file" id="image" accept="image/*" required>
-
   <label>Compra inicial (SOL)</label>
   <input type="number" id="buy" step="0.001" value="0">
-
+  <label>Seu % de fees (100 = 100% para você, default)</label>
+  <input type="number" id="creatorBps" min="0" max="10000" step="1" value="10000">
   <button type="submit" disabled id="deploy">Deploy</button>
 </form>
-
 <div id="status">Aguardando ação...</div>
 
 <script>
 const { Connection, Transaction, LAMPORTS_PER_SOL } = solanaWeb3;
 const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
-
 let provider, wallet;
-
 const status = document.getElementById("status");
-const log = (msg, err=false) => {
+const log = (msg, err = false) => {
   status.innerHTML += "\n" + msg;
   status.scrollTop = status.scrollHeight;
   if (err) status.className = "error";
 };
 
 const apiKeyInput = document.getElementById("apiKey");
-const nameInput   = document.getElementById("name");
+const nameInput = document.getElementById("name");
 const symbolInput = document.getElementById("symbol");
-const descInput   = document.getElementById("desc");
-const imageInput  = document.getElementById("image");
-const buyInput    = document.getElementById("buy");
+const descInput = document.getElementById("desc");
+const imageInput = document.getElementById("image");
+const buyInput = document.getElementById("buy");
+const creatorBpsInput = document.getElementById("creatorBps");
 
 async function fetchWithRetry(url, options, retries = 5) {
   for (let i = 0; i < retries; i++) {
-    const res = await fetch(url, options);
-    const text = await res.text();
-
     try {
-      const json = JSON.parse(text);
-      if (!res.ok) throw json;
-      return json;
-    } catch {
-      log(`⚠️ Resposta NÃO JSON (tentativa ${i + 1})`);
-      if (i === retries - 1) {
-        throw new Error(text);
+      const res = await fetch(url, options);
+      const text = await res.text();
+      try {
+        const json = JSON.parse(text);
+        if (!res.ok) {
+          throw new Error(json.message || json.error || `HTTP ${res.status}`);
+        }
+        return json;
+      } catch (parseErr) {
+        log(`⚠️ Resposta NÃO JSON (tentativa ${i + 1}): ${text.substring(0, 200)}...`, true);
+        if (i === retries - 1) throw new Error(text);
+        await new Promise(r => setTimeout(r, 1500 * (i + 1)));
       }
-      await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+    } catch (err) {
+      if (i === retries - 1) throw err;
     }
   }
 }
@@ -103,13 +95,9 @@ async function fetchWithRetry(url, options, retries = 5) {
 document.getElementById("connect").onclick = async () => {
   provider = window.phantom?.solana;
   if (!provider) return log("Phantom não detectada", true);
-
   await provider.connect();
   wallet = provider.publicKey;
-
-  document.getElementById("wallet").innerText =
-    "Wallet: " + wallet.toBase58();
-
+  document.getElementById("wallet").innerText = "Wallet: " + wallet.toBase58();
   document.getElementById("deploy").disabled = false;
   log("✅ Wallet conectada");
 };
@@ -118,23 +106,23 @@ document.getElementById("form").onsubmit = async e => {
   e.preventDefault();
   status.innerHTML = "";
   status.className = "";
-
   try {
     const apiKey = apiKeyInput.value.trim();
     const name = nameInput.value.trim();
     const symbol = symbolInput.value.trim().toUpperCase();
     const desc = descInput.value.trim() || "Token launched via Bags.fm";
     const image = imageInput.files[0];
-    const buyLamports = Math.floor(
-      (parseFloat(buyInput.value) || 0) * LAMPORTS_PER_SOL
-    );
+    const buyLamports = Math.floor((parseFloat(buyInput.value) || 0) * LAMPORTS_PER_SOL);
+    const creatorBps = parseInt(creatorBpsInput.value) || 10000;
 
     if (!apiKey || !name || !symbol || !image) {
       throw new Error("Campos obrigatórios não preenchidos");
     }
+    if (creatorBps < 0 || creatorBps > 10000) {
+      throw new Error("BPS do creator deve estar entre 0 e 10000");
+    }
 
     log("Passo 1: Criando metadata...");
-
     const fd = new FormData();
     fd.append("name", name);
     fd.append("symbol", symbol);
@@ -145,14 +133,42 @@ document.getElementById("form").onsubmit = async e => {
       "https://public-api-v2.bags.fm/api/v1/token-launch/create-token-info",
       { method: "POST", headers: { "x-api-key": apiKey }, body: fd }
     );
-
     const mint = meta.response.tokenMint;
     const metadataUrl = meta.response.tokenMetadata;
-
     log("✅ Mint: " + mint);
 
-    log("Passo 2: Criando launch transaction...");
+    log("Passo 1.5: Criando Fee Share Config (obrigatório no v2)...");
+    // Config mínima: 100% para o criador (sua wallet)
+    const feeShareBody = {
+      feeClaimers: [
+        {
+          wallet: wallet.toBase58(),
+          bps: creatorBps
+        }
+      ]
+      // Opcional: adicione mais claimers aqui, ex:
+      // { wallet: "OUTRA_WALLET", bps: 2500 }
+      // Total deve somar <= 10000
+    };
 
+    const configRes = await fetchWithRetry(
+      "https://public-api-v2.bags.fm/api/v1/token-launch/create-fee-share-configuration",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey
+        },
+        body: JSON.stringify(feeShareBody)
+      }
+    );
+
+    // Ajuste conforme response real da API (pode ser configRes.response.configKey ou .feeShareConfig etc.)
+    const configKey = configRes.response?.configKey || configRes.response?.feeShareConfig;
+    if (!configKey) throw new Error("Não recebeu configKey da API de fee share");
+    log("✅ Fee Share Config criada: " + configKey);
+
+    log("Passo 2: Criando launch transaction...");
     const launch = await fetchWithRetry(
       "https://public-api-v2.bags.fm/api/v1/token-launch/create-launch-transaction",
       {
@@ -163,9 +179,11 @@ document.getElementById("form").onsubmit = async e => {
         },
         body: JSON.stringify({
           tokenMint: mint,
-          metadataUrl,
-          payer: wallet.toBase58(),
-          initialBuyLamports: buyLamports
+          metadataUrl: metadataUrl,
+          payer: wallet.toBase58(),  // ou "wallet"
+          initialBuyLamports: buyLamports,
+          configKey: configKey       // ← ESSA É A CHAVE! Obrigatória no v2
+          // Opcional: "tipWallet": "...", "tipLamports": 10000
         })
       }
     );
@@ -178,9 +196,8 @@ document.getElementById("form").onsubmit = async e => {
     log("✅ DEPLOY CONCLUÍDO");
     log("Tx: " + sig);
     log("https://bags.fm/" + mint);
-
   } catch (err) {
-    log("❌ ERRO REAL:\n" + err.message, true);
+    log("❌ ERRO REAL:\n" + (err.message || err), true);
   }
 };
 </script>
