@@ -2,132 +2,150 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>Testador Bags.fm API v1 - Pronto para API Key</title>
+  <title>Testador Automático Bags.fm API v1 - Wallet Pré-preenchida</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 20px; background: #f9f9f9; line-height: 1.5; }
+    body { font-family: Arial, sans-serif; max-width: 1000px; margin: 30px auto; padding: 20px; background: #f9f9f9; line-height: 1.5; }
     h1 { color: #2c3e50; }
     label { font-weight: bold; display: block; margin: 15px 0 5px; color: #34495e; }
-    input, select, textarea { width: 100%; padding: 10px; box-sizing: border-box; font-family: monospace; border: 1px solid #bdc3c7; border-radius: 4px; }
-    button { background: #27ae60; color: white; border: none; padding: 14px 24px; cursor: pointer; font-size: 16px; margin-top: 15px; border-radius: 4px; }
-    button:hover { background: #219653; }
-    #response { margin-top: 30px; padding: 20px; background: #fff; border: 1px solid #ecf0f1; border-radius: 6px; white-space: pre-wrap; font-family: monospace; max-height: 700px; overflow-y: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-    .success { border-left: 5px solid #27ae60; padding-left: 10px; }
-    .error { border-left: 5px solid #e74c3c; padding-left: 10px; background: #fff5f5; }
-    .info { color: #7f8c8d; font-size: 0.95em; margin-top: 20px; }
+    input { width: 100%; padding: 12px; box-sizing: border-box; font-family: monospace; border: 1px solid #bdc3c7; border-radius: 4px; font-size: 16px; }
+    button { background: #e67e22; color: white; border: none; padding: 14px 30px; cursor: pointer; font-size: 18px; margin: 20px 0; border-radius: 6px; }
+    button:hover { background: #d35400; }
+    button:disabled { background: #95a5a6; cursor: not-allowed; }
+    #response { margin-top: 20px; padding: 20px; background: #fff; border: 1px solid #ecf0f1; border-radius: 6px; white-space: pre-wrap; font-family: monospace; max-height: 800px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .success { color: #27ae60; font-weight: bold; border-left: 5px solid #27ae60; padding-left: 10px; margin: 10px 0; }
+    .error { color: #e74c3c; font-weight: bold; border-left: 5px solid #e74c3c; padding-left: 10px; margin: 10px 0; background: #fff5f5; }
+    .info { color: #7f8c8d; font-size: 0.95em; margin: 15px 0; }
+    #status { font-weight: bold; color: #2980b9; margin-bottom: 10px; }
   </style>
 </head>
 <body>
-  <h1>Testador de Endpoints Bags.fm API v1</h1>
-  <p>Coloque sua API Key abaixo e teste os endpoints reais da API (base: https://public-api-v2.bags.fm/api/v1). Comece por /ping.</p>
+  <h1>Testador Automático: Todos Endpoints Fee Share / Token Launch</h1>
+  <p>Wallet já pré-preenchida: <strong>Ew2qGw5shsW3A2PWXNQWgRap14mVH5G7FDiTXTHhtdDr</strong></p>
+  <p>Cole apenas sua API Key e clique no botão. O teste roda sozinho (um endpoint por vez, com 2s de intervalo).</p>
 
-  <label>API Key (x-api-key)</label>
-  <input id="apiKey" type="text" placeholder="Cole sua API Key aqui (obrigatória na maioria)">
+  <label>Sua API Key (x-api-key)</label>
+  <input id="apiKey" type="text" placeholder="Cole sua API Key aqui">
 
-  <label>Endpoint (selecione da lista)</label>
-  <select id="endpoint">
-    <option value="/ping">GET /ping → Health check (pode funcionar sem key)</option>
-    <option value="/token-launch/create-token-info">POST /token-launch/create-token-info → Cria metadata (precisa FormData no deploy real)</option>
-    <option value="/token-launch/create-launch-transaction">POST /token-launch/create-launch-transaction → Cria tx de launch (precisa configKey)</option>
-    <option value="/fee-share/config">POST /fee-share/config → Cria fee share config tx (confirmado em tipping docs)</option>
-    <option value="/token-launch/fee-share/create-config">POST /token-launch/fee-share/create-config → Fee share config v2 (changelog)</option>
-    <option value="/create-fee-share-configuration">POST /create-fee-share-configuration → Fee share config creation tx (api-ref)</option>
-    <option value="/token-launch/create-config">POST /token-launch/create-config → Config antiga (deprecation possível)</option>
-    <option value="/fee-share-wallet">GET /fee-share-wallet → Get fee share wallet v2</option>
-    <option value="/fee-share-wallet-bulk">POST /fee-share-wallet-bulk → Bulk get fee share wallets</option>
-    <option value="/trade/swap">POST /trade/swap → Cria tx de swap/buy/sell</option>
-    <option value="/token-launch/state/pool-config">POST /token-launch/state/pool-config → Get pool config keys</option>
-    <option value="/token-launch/creator/v3">GET /token-launch/creator/v3 → Analytics creators</option>
-    <option value="/token-launch/lifetime-fees">GET /token-launch/lifetime-fees → Lifetime fees por token</option>
-  </select>
+  <label>Sua Wallet Base58 (já preenchida)</label>
+  <input id="wallet" type="text" value="Ew2qGw5shsW3A2PWXNQWgRap14mVH5G7FDiTXTHhtdDr" readonly>
 
-  <label>Método</label>
-  <select id="method">
-    <option value="GET">GET</option>
-    <option value="POST" selected>POST</option>
-  </select>
+  <button id="startBtn" onclick="startAutoTest()">Testar Todos os Endpoints (automático)</button>
 
-  <label>Body JSON para POST (edite com seus dados reais)</label>
-  <textarea id="body" rows="8">{
-  "payer": "SUA_WALLET_BASE58_AQUI",
-  "baseMint": "SEU_MINT_AQUI",
-  "feeClaimers": [
-    {
-      "user": "SUA_WALLET_BASE58_AQUI",
-      "userBps": 10000
-    }
-  ],
-  "tipWallet": "",
-  "tipLamports": 0
-}</textarea>
-
-  <button onclick="testEndpoint()">Testar Endpoint Agora</button>
-
-  <div id="response">Resultado vai aparecer aqui. Teste /ping primeiro!</div>
+  <div id="status">Aguardando...</div>
+  <div id="response"></div>
 
   <div class="info">
-    <p><strong>Dicas:</strong></p>
+    <p><strong>Endpoints que serão testados automaticamente:</strong></p>
     <ul>
-      <li>Para fee share: procure endpoint que retorne algo como {"response": "long_base58_string"} (serialized tx).</li>
-      <li>Se der 200 + JSON → esse é o endpoint correto! Anote qual body funcionou.</li>
-      <li>404/Method Not Allowed → endpoint errado ou método incorreto.</li>
-      <li>500 Internal → body inválido ou bug temporário.</li>
-      <li>401/403 → API Key inválida/expirada.</li>
+      <li>GET /ping</li>
+      <li>POST /fee-share/config</li>
+      <li>POST /token-launch/fee-share/create-config</li>
+      <li>POST /create-fee-share-configuration</li>
+      <li>POST /token-launch/create-config</li>
+      <li>POST /token-launch/create-launch-transaction</li>
+      <li>GET /fee-share-wallet</li>
+      <li>POST /token-launch/create-token-info (teste básico)</li>
+      <li>POST /trade/swap</li>
+      <li>POST /token-launch/state/pool-config</li>
     </ul>
+    <p>Procure por <strong>SUCESSO</strong> com uma string longa base58 (ex: começa com "AQAB..." ou similar) no campo "response". Esse é o endpoint que cria a transaction de fee share config.</p>
   </div>
 
   <script>
-    async function testEndpoint() {
-      const apiKey = document.getElementById('apiKey').value.trim();
-      const endpoint = document.getElementById('endpoint').value.trim();
-      const method = document.getElementById('method').value;
-      const bodyText = document.getElementById('body').value.trim();
+    const endpoints = [
+      { path: "/ping", method: "GET", body: null },
+      { path: "/fee-share/config", method: "POST", body: true },
+      { path: "/token-launch/fee-share/create-config", method: "POST", body: true },
+      { path: "/create-fee-share-configuration", method: "POST", body: true },
+      { path: "/token-launch/create-config", method: "POST", body: true },
+      { path: "/token-launch/create-launch-transaction", method: "POST", body: true },
+      { path: "/fee-share-wallet", method: "GET", body: null },
+      { path: "/token-launch/create-token-info", method: "POST", body: false },
+      { path: "/trade/swap", method: "POST", body: false },
+      { path: "/token-launch/state/pool-config", method: "POST", body: false }
+    ];
+
+    let isRunning = false;
+
+    async function testSingle(endpoint, apiKey, wallet) {
       const responseDiv = document.getElementById('response');
+      const statusDiv = document.getElementById('status');
 
-      responseDiv.innerHTML = 'Testando... Aguarde (pode demorar alguns segundos)';
-
-      if (!apiKey && !endpoint.includes('/ping')) {
-        responseDiv.innerHTML = '<span class="error">Insira a API Key para endpoints que não sejam /ping.</span>';
-        return;
-      }
-
-      const url = `https://public-api-v2.bags.fm/api/v1${endpoint}`;
+      statusDiv.textContent = `Testando: ${endpoint.method} ${endpoint.path} ...`;
+      
+      const url = `https://public-api-v2.bags.fm/api/v1${endpoint.path}`;
       const options = {
-        method: method,
-        headers: {
-          'x-api-key': apiKey
-        }
+        method: endpoint.method,
+        headers: { 'x-api-key': apiKey }
       };
 
-      if (method === 'POST' && bodyText) {
-        try {
-          const jsonBody = JSON.parse(bodyText);
-          options.headers['Content-Type'] = 'application/json';
-          options.body = JSON.stringify(jsonBody);
-        } catch (e) {
-          responseDiv.innerHTML = `<span class="error">JSON inválido no body: ${e.message}</span>`;
-          return;
-        }
+      let bodyContent = null;
+      if (endpoint.body === true) {
+        bodyContent = {
+          payer: wallet,
+          baseMint: "ApoGd3JEfk9d7hXwxGrZtuWYQNcN8ty7xML1DgZ2BAGS",
+          feeClaimers: [{ user: wallet, userBps: 10000 }],
+          tipWallet: "",
+          tipLamports: 0
+        };
+        options.headers['Content-Type'] = 'application/json';
+        options.body = JSON.stringify(bodyContent);
       }
 
       try {
         const res = await fetch(url, options);
         const text = await res.text();
 
-        let content = `Status: ${res.status} ${res.statusText}\n`;
-        content += `URL completa: ${url}\n\n`;
-        content += `Headers de resposta:\n`;
-        res.headers.forEach((v, k) => { content += `  ${k}: ${v}\n`; });
-        content += `\nBody da resposta:\n${text.substring(0, 3000)}${text.length > 3000 ? '\n... (truncado - veja console do navegador para completo)' : ''}`;
+        let result = `\n[${new Date().toLocaleTimeString()}] ${endpoint.method} ${endpoint.path}\n`;
+        result += `Status: ${res.status} ${res.statusText}\n`;
 
-        const className = res.ok ? 'success' : 'error';
-        responseDiv.innerHTML = `<div class="${className}">${content}</div>`;
+        if (res.ok) {
+          result += `<span class="success">SUCESSO! Resposta: ${text.substring(0, 800)}${text.length > 800 ? '...' : ''}</span>\n`;
+          if (text.length > 200 && (text.includes('response') || text.match(/^[A-Za-z0-9+/=]{100,}/))) {
+            result += '→ MUITO PROVÁVEL QUE SEJA O ENDPOINT CERTO (tx serialized detectada)!\n';
+          }
+        } else {
+          result += `<span class="error">ERRO: ${text.substring(0, 300) || 'Sem corpo'}</span>\n`;
+        }
 
-        // Log extra no console para debug
-        console.log('Resposta completa:', text);
+        responseDiv.innerHTML += result + '\n------------------------------------\n';
+        responseDiv.scrollTop = responseDiv.scrollHeight;
       } catch (err) {
-        responseDiv.innerHTML = `<span class="error">Falha na requisição: ${err.message} (verifique rede ou CORS)</span>`;
+        responseDiv.innerHTML += `\n[${new Date().toLocaleTimeString()}] ${endpoint.path} → <span class="error">Falha na requisição: ${err.message}</span>\n------------------------------------\n`;
+        responseDiv.scrollTop = responseDiv.scrollHeight;
       }
+    }
+
+    async function startAutoTest() {
+      const apiKey = document.getElementById('apiKey').value.trim();
+      const wallet = document.getElementById('wallet').value.trim();
+      const btn = document.getElementById('startBtn');
+      const status = document.getElementById('status');
+
+      if (!apiKey) {
+        alert('Por favor, cole sua API Key!');
+        return;
+      }
+
+      if (isRunning) return;
+      isRunning = true;
+      btn.disabled = true;
+      btn.textContent = 'Testando... Aguarde (pode levar 30-60 segundos)';
+
+      document.getElementById('response').innerHTML = '';
+      status.textContent = 'Iniciando testes automáticos...';
+
+      for (const ep of endpoints) {
+        if (!isRunning) break;
+        await testSingle(ep, apiKey, wallet);
+        await new Promise(r => setTimeout(r, 2200)); // 2.2s de delay para segurança
+      }
+
+      status.textContent = 'Teste automático finalizado! Role para cima e procure por SUCESSO com string base58 longa.';
+      btn.disabled = false;
+      btn.textContent = 'Testar Todos os Endpoints (automático)';
+      isRunning = false;
     }
   </script>
 </body>
