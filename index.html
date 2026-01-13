@@ -2,151 +2,184 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>Testador Automático Bags.fm API v1 - Wallet Pré-preenchida</title>
+  <title>Bags.fm Deploy v2 - Fee Share Corrigido</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
+  <script src="https://unpkg.com/bs58@5.0.0/dist/index.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 1000px; margin: 30px auto; padding: 20px; background: #f9f9f9; line-height: 1.5; }
-    h1 { color: #2c3e50; }
-    label { font-weight: bold; display: block; margin: 15px 0 5px; color: #34495e; }
-    input { width: 100%; padding: 12px; box-sizing: border-box; font-family: monospace; border: 1px solid #bdc3c7; border-radius: 4px; font-size: 16px; }
-    button { background: #e67e22; color: white; border: none; padding: 14px 30px; cursor: pointer; font-size: 18px; margin: 20px 0; border-radius: 6px; }
-    button:hover { background: #d35400; }
-    button:disabled { background: #95a5a6; cursor: not-allowed; }
-    #response { margin-top: 20px; padding: 20px; background: #fff; border: 1px solid #ecf0f1; border-radius: 6px; white-space: pre-wrap; font-family: monospace; max-height: 800px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    .success { color: #27ae60; font-weight: bold; border-left: 5px solid #27ae60; padding-left: 10px; margin: 10px 0; }
-    .error { color: #e74c3c; font-weight: bold; border-left: 5px solid #e74c3c; padding-left: 10px; margin: 10px 0; background: #fff5f5; }
-    .info { color: #7f8c8d; font-size: 0.95em; margin: 15px 0; }
-    #status { font-weight: bold; color: #2980b9; margin-bottom: 10px; }
+    body { font-family: Arial; max-width: 720px; margin: 40px auto; padding: 20px; }
+    label { font-weight: bold; margin-top: 12px; display: block; }
+    input, textarea, button { width: 100%; padding: 10px; margin-top: 6px; }
+    button { background: #007bff; color: #fff; border: none; cursor: pointer; }
+    button:disabled { background: #ccc; }
+    #status { margin-top: 20px; background: #f5f5f5; padding: 15px; white-space: pre-wrap; font-family: monospace; max-height: 500px; overflow-y: auto; }
+    .error { background: #ffe6e6; }
   </style>
 </head>
 <body>
-  <h1>Testador Automático: Todos Endpoints Fee Share / Token Launch</h1>
-  <p>Wallet já pré-preenchida: <strong>Ew2qGw5shsW3A2PWXNQWgRap14mVH5G7FDiTXTHhtdDr</strong></p>
-  <p>Cole apenas sua API Key e clique no botão. O teste roda sozinho (um endpoint por vez, com 2s de intervalo).</p>
+<h2>Deploy Token Bags.fm v2 (Fee Share via /fee-share/config)</h2>
+<button id="connect">Conectar Phantom</button>
+<p id="wallet">Wallet: desconectada</p>
+<form id="form">
+  <label>API Key</label>
+  <input id="apiKey" required>
+  <label>Nome</label>
+  <input id="name" required>
+  <label>Símbolo (max 8 chars)</label>
+  <input id="symbol" maxlength="8" required>
+  <label>Descrição</label>
+  <textarea id="desc" placeholder="Descrição do token"></textarea>
+  <label>Imagem</label>
+  <input type="file" id="image" accept="image/*" required>
+  <label>Compra inicial (SOL)</label>
+  <input type="number" id="buy" step="0.001" value="0">
+  <label>Seu % de fees (10000 = 100%)</label>
+  <input type="number" id="creatorBps" min="0" max="10000" value="10000">
+  <button type="submit" disabled id="deploy">Deploy</button>
+</form>
+<div id="status">Aguardando...</div>
 
-  <label>Sua API Key (x-api-key)</label>
-  <input id="apiKey" type="text" placeholder="Cole sua API Key aqui">
+<script>
+const { Connection, Transaction, PublicKey, LAMPORTS_PER_SOL } = solanaWeb3;
+const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
+const FEE_SHARE_PROGRAM = new PublicKey("FEE2tBhCKAt7shrod19QttSVREUYPiyMzoku1mL1gqVK");
 
-  <label>Sua Wallet Base58 (já preenchida)</label>
-  <input id="wallet" type="text" value="Ew2qGw5shsW3A2PWXNQWgRap14mVH5G7FDiTXTHhtdDr" readonly>
+let provider, wallet;
+const status = document.getElementById("status");
+const log = (msg, err = false) => {
+  status.innerHTML += "\n" + msg;
+  status.scrollTop = status.scrollHeight;
+  if (err) status.className = "error";
+};
 
-  <button id="startBtn" onclick="startAutoTest()">Testar Todos os Endpoints (automático)</button>
+const apiKeyInput = document.getElementById("apiKey");
+const nameInput = document.getElementById("name");
+const symbolInput = document.getElementById("symbol");
+const descInput = document.getElementById("desc");
+const imageInput = document.getElementById("image");
+const buyInput = document.getElementById("buy");
+const creatorBpsInput = document.getElementById("creatorBps");
 
-  <div id="status">Aguardando...</div>
-  <div id="response"></div>
-
-  <div class="info">
-    <p><strong>Endpoints que serão testados automaticamente:</strong></p>
-    <ul>
-      <li>GET /ping</li>
-      <li>POST /fee-share/config</li>
-      <li>POST /token-launch/fee-share/create-config</li>
-      <li>POST /create-fee-share-configuration</li>
-      <li>POST /token-launch/create-config</li>
-      <li>POST /token-launch/create-launch-transaction</li>
-      <li>GET /fee-share-wallet</li>
-      <li>POST /token-launch/create-token-info (teste básico)</li>
-      <li>POST /trade/swap</li>
-      <li>POST /token-launch/state/pool-config</li>
-    </ul>
-    <p>Procure por <strong>SUCESSO</strong> com uma string longa base58 (ex: começa com "AQAB..." ou similar) no campo "response". Esse é o endpoint que cria a transaction de fee share config.</p>
-  </div>
-
-  <script>
-    const endpoints = [
-      { path: "/ping", method: "GET", body: null },
-      { path: "/fee-share/config", method: "POST", body: true },
-      { path: "/token-launch/fee-share/create-config", method: "POST", body: true },
-      { path: "/create-fee-share-configuration", method: "POST", body: true },
-      { path: "/token-launch/create-config", method: "POST", body: true },
-      { path: "/token-launch/create-launch-transaction", method: "POST", body: true },
-      { path: "/fee-share-wallet", method: "GET", body: null },
-      { path: "/token-launch/create-token-info", method: "POST", body: false },
-      { path: "/trade/swap", method: "POST", body: false },
-      { path: "/token-launch/state/pool-config", method: "POST", body: false }
-    ];
-
-    let isRunning = false;
-
-    async function testSingle(endpoint, apiKey, wallet) {
-      const responseDiv = document.getElementById('response');
-      const statusDiv = document.getElementById('status');
-
-      statusDiv.textContent = `Testando: ${endpoint.method} ${endpoint.path} ...`;
-      
-      const url = `https://public-api-v2.bags.fm/api/v1${endpoint.path}`;
-      const options = {
-        method: endpoint.method,
-        headers: { 'x-api-key': apiKey }
-      };
-
-      let bodyContent = null;
-      if (endpoint.body === true) {
-        bodyContent = {
-          payer: wallet,
-          baseMint: "ApoGd3JEfk9d7hXwxGrZtuWYQNcN8ty7xML1DgZ2BAGS",
-          feeClaimers: [{ user: wallet, userBps: 10000 }],
-          tipWallet: "",
-          tipLamports: 0
-        };
-        options.headers['Content-Type'] = 'application/json';
-        options.body = JSON.stringify(bodyContent);
-      }
-
-      try {
-        const res = await fetch(url, options);
-        const text = await res.text();
-
-        let result = `\n[${new Date().toLocaleTimeString()}] ${endpoint.method} ${endpoint.path}\n`;
-        result += `Status: ${res.status} ${res.statusText}\n`;
-
-        if (res.ok) {
-          result += `<span class="success">SUCESSO! Resposta: ${text.substring(0, 800)}${text.length > 800 ? '...' : ''}</span>\n`;
-          if (text.length > 200 && (text.includes('response') || text.match(/^[A-Za-z0-9+/=]{100,}/))) {
-            result += '→ MUITO PROVÁVEL QUE SEJA O ENDPOINT CERTO (tx serialized detectada)!\n';
-          }
-        } else {
-          result += `<span class="error">ERRO: ${text.substring(0, 300) || 'Sem corpo'}</span>\n`;
-        }
-
-        responseDiv.innerHTML += result + '\n------------------------------------\n';
-        responseDiv.scrollTop = responseDiv.scrollHeight;
-      } catch (err) {
-        responseDiv.innerHTML += `\n[${new Date().toLocaleTimeString()}] ${endpoint.path} → <span class="error">Falha na requisição: ${err.message}</span>\n------------------------------------\n`;
-        responseDiv.scrollTop = responseDiv.scrollHeight;
-      }
+async function fetchWithRetry(url, options, retries = 5) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url, options);
+      const text = await res.text();
+      log(`Tentativa ${i+1} - ${res.status} - Preview: ${text.slice(0,200)}...`);
+      const json = JSON.parse(text);
+      if (!res.ok) throw new Error(json.error || json.message || `HTTP ${res.status}`);
+      return json;
+    } catch (e) {
+      log(`⚠️ Erro (tent ${i+1}): ${e.message}`, true);
+      if (i === retries - 1) throw e;
+      await new Promise(r => setTimeout(r, 2000 * (i+1)));
     }
+  }
+}
 
-    async function startAutoTest() {
-      const apiKey = document.getElementById('apiKey').value.trim();
-      const wallet = document.getElementById('wallet').value.trim();
-      const btn = document.getElementById('startBtn');
-      const status = document.getElementById('status');
+document.getElementById("connect").onclick = async () => {
+  provider = window.phantom?.solana;
+  if (!provider) return log("Phantom não encontrada", true);
+  await provider.connect();
+  wallet = provider.publicKey;
+  document.getElementById("wallet").innerText = "Wallet: " + wallet.toBase58();
+  document.getElementById("deploy").disabled = false;
+  log("✅ Wallet conectada");
+};
 
-      if (!apiKey) {
-        alert('Por favor, cole sua API Key!');
-        return;
+document.getElementById("form").onsubmit = async e => {
+  e.preventDefault();
+  status.innerHTML = "";
+  status.className = "";
+  try {
+    const apiKey = apiKeyInput.value.trim();
+    const name = nameInput.value.trim();
+    const symbol = symbolInput.value.trim().toUpperCase();
+    const desc = descInput.value.trim() || "Launched via Bags.fm";
+    const image = imageInput.files[0];
+    const buyLamports = Math.floor((parseFloat(buyInput.value) || 0) * LAMPORTS_PER_SOL);
+    const creatorBps = parseInt(creatorBpsInput.value) || 10000;
+
+    if (!apiKey || !name || !symbol || !image) throw new Error("Campos obrigatórios faltando");
+
+    log("Passo 1: Metadata...");
+    const fd = new FormData();
+    fd.append("name", name);
+    fd.append("symbol", symbol);
+    fd.append("description", desc);
+    fd.append("image", image);
+
+    const meta = await fetchWithRetry(
+      "https://public-api-v2.bags.fm/api/v1/token-launch/create-token-info",
+      { method: "POST", headers: { "x-api-key": apiKey }, body: fd }
+    );
+    const mintStr = meta.response.tokenMint;
+    const metadataUrl = meta.response.tokenMetadata;
+    log("✅ Mint: " + mintStr);
+
+    log("Passo 1.5: Fee Share Config tx...");
+    const feeBody = {
+      payer: wallet.toBase58(),
+      baseMint: mintStr,
+      feeClaimers: [{ user: wallet.toBase58(), userBps: creatorBps }]
+    };
+
+    const feeRes = await fetchWithRetry(
+      "https://public-api-v2.bags.fm/api/v1/fee-share/config",  // principal das docs
+      // Se der 500, mude para: "https://public-api-v2.bags.fm/api/v1/token-launch/fee-share/create-config"
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+        body: JSON.stringify(feeBody)
       }
+    );
 
-      if (isRunning) return;
-      isRunning = true;
-      btn.disabled = true;
-      btn.textContent = 'Testando... Aguarde (pode levar 30-60 segundos)';
+    let txSerialized = feeRes.response;
+    if (feeRes.response.transaction) txSerialized = feeRes.response.transaction;
+    log("Tx preview: " + txSerialized.substring(0, 100) + "...");
 
-      document.getElementById('response').innerHTML = '';
-      status.textContent = 'Iniciando testes automáticos...';
+    const configTx = Transaction.from(bs58.decode(txSerialized));
+    const signedConfig = await provider.signTransaction(configTx);
+    const configSig = await connection.sendRawTransaction(signedConfig.serialize());
+    await connection.confirmTransaction(configSig, "confirmed");
+    log("✅ Config tx confirmada: " + configSig);
 
-      for (const ep of endpoints) {
-        if (!isRunning) break;
-        await testSingle(ep, apiKey, wallet);
-        await new Promise(r => setTimeout(r, 2200)); // 2.2s de delay para segurança
+    // Derivar configKey PDA
+    const [configPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("fee_share_config"), new PublicKey(mintStr).toBuffer()],
+      FEE_SHARE_PROGRAM
+    );
+    const configKey = configPda.toBase58();
+    log("Config Key: " + configKey);
+
+    log("Passo 2: Launch tx...");
+    const launchRes = await fetchWithRetry(
+      "https://public-api-v2.bags.fm/api/v1/token-launch/create-launch-transaction",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+        body: JSON.stringify({
+          tokenMint: mintStr,
+          metadataUrl: metadataUrl,
+          payer: wallet.toBase58(),
+          initialBuyLamports: buyLamports,
+          configKey: configKey
+        })
       }
+    );
 
-      status.textContent = 'Teste automático finalizado! Role para cima e procure por SUCESSO com string base58 longa.';
-      btn.disabled = false;
-      btn.textContent = 'Testar Todos os Endpoints (automático)';
-      isRunning = false;
-    }
-  </script>
+    const launchTx = Transaction.from(bs58.decode(launchRes.response));
+    const signedLaunch = await provider.signTransaction(launchTx);
+    const sig = await connection.sendRawTransaction(signedLaunch.serialize());
+    await connection.confirmTransaction(sig, "confirmed");
+
+    log("✅ DEPLOY OK!");
+    log("Tx: " + sig);
+    log("Token: https://bags.fm/" + mintStr);
+  } catch (err) {
+    log("❌ ERRO: " + err.message, true);
+  }
+};
+</script>
 </body>
 </html>
