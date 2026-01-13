@@ -2,199 +2,131 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>Bags.fm Token Deploy (v2 Fee Share - CORRIGIDO 500)</title>
+  <title>Testador de Endpoints Bags.fm API v1</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
-  <script src="https://unpkg.com/bs58@5.0.0/dist/index.min.js"></script>
   <style>
-    body { font-family: Arial; max-width: 720px; margin: 40px auto; padding: 20px; }
-    label { font-weight: bold; margin-top: 12px; display: block; }
-    input, textarea, button { width: 100%; padding: 10px; margin-top: 6px; }
-    button { background: #007bff; color: #fff; border: none; cursor: pointer; }
-    button:disabled { background: #ccc; }
-    #status { margin-top: 20px; background: #f5f5f5; padding: 15px; white-space: pre-wrap; font-family: monospace; max-height: 500px; overflow-y: auto; }
-    .error { background: #ffe6e6; }
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 20px; background: #f9f9f9; }
+    h1 { color: #333; }
+    label { font-weight: bold; display: block; margin: 15px 0 5px; }
+    input, select, textarea { width: 100%; padding: 10px; box-sizing: border-box; font-family: monospace; }
+    button { background: #28a745; color: white; border: none; padding: 12px 20px; cursor: pointer; font-size: 16px; margin-top: 10px; }
+    button:hover { background: #218838; }
+    #response { margin-top: 30px; padding: 15px; background: #fff; border: 1px solid #ddd; white-space: pre-wrap; font-family: monospace; max-height: 600px; overflow-y: auto; }
+    .success { border-left: 5px solid #28a745; }
+    .error { border-left: 5px solid #dc3545; background: #fff5f5; }
+    #endpoints-list { margin-top: 10px; font-size: 0.9em; color: #555; }
   </style>
 </head>
 <body>
-<h2>Deploy Token no Bags.fm (v2 - Fee Share com baseMint)</h2>
-<button id="connect">Conectar Phantom</button>
-<p id="wallet">Wallet: desconectada</p>
-<form id="form">
-  <label>API Key</label>
-  <input id="apiKey" required>
-  <label>Nome</label>
-  <input id="name" required>
-  <label>Símbolo</label>
-  <input id="symbol" maxlength="8" required>
-  <label>Descrição (obrigatória)</label>
-  <textarea id="desc" placeholder="Descrição do token"></textarea>
-  <label>Imagem</label>
-  <input type="file" id="image" accept="image/*" required>
-  <label>Compra inicial (SOL)</label>
-  <input type="number" id="buy" step="0.001" value="0">
-  <label>Seu % de fees (10000 = 100%, default)</label>
-  <input type="number" id="creatorBps" min="0" max="10000" step="1" value="10000">
-  <button type="submit" disabled id="deploy">Deploy</button>
-</form>
-<div id="status">Aguardando ação...</div>
+  <h1>Testador de Endpoints Bags.fm API (public-api-v2.bags.fm/api/v1)</h1>
+  <p>Insira sua API Key (pegue em <a href="https://dev.bags.fm" target="_blank">dev.bags.fm</a>) e teste os endpoints conhecidos da doc oficial + variações.</p>
 
-<script>
-const { Connection, Transaction, PublicKey, LAMPORTS_PER_SOL } = solanaWeb3;
-const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
-const FEE_SHARE_PROGRAM_ID = new PublicKey("FEE2tBhCKAt7shrod19QttSVREUYPiyMzoku1mL1gqVK");
+  <label>API Key (x-api-key header)</label>
+  <input id="apiKey" type="text" placeholder="Sua API Key aqui (obrigatória na maioria)">
 
-let provider, wallet;
-const status = document.getElementById("status");
-const log = (msg, err = false) => {
-  status.innerHTML += "\n" + msg;
-  status.scrollTop = status.scrollHeight;
-  if (err) status.className = "error";
-};
+  <label>Endpoint (relativo, ex: /ping ou /token-launch/create-token-info)</label>
+  <select id="endpoint">
+    <option value="/ping">GET /ping (health check - sem key em alguns casos)</option>
+    <option value="/token-launch/create-token-info">POST /token-launch/create-token-info (metadata + upload)</option>
+    <option value="/token-launch/create-launch-transaction">POST /token-launch/create-launch-transaction (launch tx)</option>
+    <option value="/fee-share/config">POST /fee-share/config (fee share config - comum em tipping)</option>
+    <option value="/token-launch/fee-share/create-config">POST /token-launch/fee-share/create-config (fee share v2)</option>
+    <option value="/create-fee-share-configuration">POST /create-fee-share-configuration (fee share config creation tx)</option>
+    <option value="/token-launch/create-config">POST /token-launch/create-config (config antiga?)</option>
+    <option value="/fee-share-wallet">GET /fee-share-wallet (get fee share wallet v2)</option>
+    <option value="/fee-share-wallet-bulk">POST /fee-share-wallet-bulk (bulk get)</option>
+    <option value="/trade/swap">POST /trade/swap (create swap tx)</option>
+    <option value="/token-launch/state/pool-config">POST /token-launch/state/pool-config (pool config keys)</option>
+    <option value="/token-launch/creator/v3">GET /token-launch/creator/v3 (creators analytics)</option>
+    <option value="/token-launch/lifetime-fees">GET /token-launch/lifetime-fees (fees por mint)</option>
+    <!-- Adicione mais se quiser testar variações -->
+  </select>
 
-const apiKeyInput = document.getElementById("apiKey");
-const nameInput = document.getElementById("name");
-const symbolInput = document.getElementById("symbol");
-const descInput = document.getElementById("desc");
-const imageInput = document.getElementById("image");
-const buyInput = document.getElementById("buy");
-const creatorBpsInput = document.getElementById("creatorBps");
+  <label>Método</label>
+  <select id="method">
+    <option value="GET">GET</option>
+    <option value="POST" selected>POST</option>
+  </select>
 
-async function fetchWithRetry(url, options, retries = 5) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const res = await fetch(url, options);
-      const text = await res.text();
-      log(`Tentativa ${i+1} - Status: ${res.status} - Body preview: ${text.substring(0, 150)}...`);
-      try {
-        const json = JSON.parse(text);
-        if (!res.ok) throw new Error(json.message || json.error || `HTTP ${res.status}`);
-        return json;
-      } catch (parseErr) {
-        log(`⚠️ Não JSON (tentativa ${i+1}): ${text}`, true);
-        if (i === retries - 1) throw new Error(`Resposta final: ${text}`);
-        await new Promise(r => setTimeout(r, 2000 * (i + 1)));
-      }
-    } catch (err) {
-      if (i === retries - 1) throw err;
+  <label>Body JSON (para POST - edite conforme necessário)</label>
+  <textarea id="body" rows="6" placeholder='Exemplo para fee-share:
+{
+  "payer": "SuaWalletBase58",
+  "baseMint": "SeuMintAqui",
+  "feeClaimers": [{"user": "SuaWalletBase58", "userBps": 10000}]
+}'>
+{
+  "payer": "INSIRA_SUA_WALLET_AQUI_SE_NECESSARIO",
+  "baseMint": "INSIRA_MINT_AQUI_SE_NECESSARIO",
+  "feeClaimers": [
+    {
+      "user": "INSIRA_WALLET_AQUI",
+      "userBps": 10000
     }
-  }
+  ]
 }
+</textarea>
 
-document.getElementById("connect").onclick = async () => {
-  provider = window.phantom?.solana;
-  if (!provider) return log("Phantom não detectada", true);
-  await provider.connect();
-  wallet = provider.publicKey;
-  document.getElementById("wallet").innerText = "Wallet: " + wallet.toBase58();
-  document.getElementById("deploy").disabled = false;
-  log("✅ Wallet conectada");
-};
+  <button onclick="testEndpoint()">Testar Endpoint</button>
 
-document.getElementById("form").onsubmit = async e => {
-  e.preventDefault();
-  status.innerHTML = "";
-  status.className = "";
-  try {
-    const apiKey = apiKeyInput.value.trim();
-    const name = nameInput.value.trim();
-    const symbol = symbolInput.value.trim().toUpperCase();
-    const desc = descInput.value.trim() || "Token launched via Bags.fm";
-    const image = imageInput.files[0];
-    const buyLamports = Math.floor((parseFloat(buyInput.value) || 0) * LAMPORTS_PER_SOL);
-    const creatorBps = parseInt(creatorBpsInput.value) || 10000;
+  <div id="response">Resultado aparecerá aqui...</div>
 
-    if (!apiKey || !name || !symbol || !image) throw new Error("Campos obrigatórios não preenchidos");
+  <div id="endpoints-list">
+    <p><strong>Endpoints confirmados na doc (2026):</strong> /ping, /token-launch/create-token-info, /token-launch/create-launch-transaction, /fee-share/config, /token-launch/fee-share/create-config, /create-fee-share-configuration, /fee-share-wallet, /trade/swap, etc.</p>
+    <p>Se algum retornar 200 + JSON válido → é o endpoint correto! Se 404/405 → não existe. 500 → erro interno (parâmetro errado).</p>
+  </div>
 
-    log("Passo 1: Criando metadata...");
-    const fd = new FormData();
-    fd.append("name", name);
-    fd.append("symbol", symbol);
-    fd.append("description", desc);
-    fd.append("image", image);
+  <script>
+    async function testEndpoint() {
+      const apiKey = document.getElementById('apiKey').value.trim();
+      const endpoint = document.getElementById('endpoint').value.trim();
+      const method = document.getElementById('method').value;
+      const bodyText = document.getElementById('body').value.trim();
+      const responseDiv = document.getElementById('response');
 
-    const meta = await fetchWithRetry(
-      "https://public-api-v2.bags.fm/api/v1/token-launch/create-token-info",
-      { method: "POST", headers: { "x-api-key": apiKey }, body: fd }
-    );
-    const mintStr = meta.response.tokenMint;
-    const metadataUrl = meta.response.tokenMetadata;
-    log("✅ Mint: " + mintStr);
-
-    log("Passo 1.5: Criando Fee Share Config transaction (com baseMint)...");
-    const feeShareBody = {
-      payer: wallet.toBase58(),
-      baseMint: mintStr,  // ← ESSENCIAL! Resolve provável causa do 500
-      feeClaimers: [{
-        user: wallet.toBase58(),
-        userBps: creatorBps
-      }]
-      // opcional: tipWallet, tipLamports
-    };
-
-    let configEndpoint = "https://public-api-v2.bags.fm/api/v1/fee-share/config";
-    let configTxRes = await fetchWithRetry(
-      configEndpoint,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
-        body: JSON.stringify(feeShareBody)
+      if (!apiKey && endpoint !== '/ping') {
+        responseDiv.innerHTML = '<span class="error">API Key é obrigatória para a maioria dos endpoints (exceto /ping).</span>';
+        return;
       }
-    );
 
-    // Se der 404/500 persistente, descomente e teste este alternativo:
-    // configEndpoint = "https://public-api-v2.bags.fm/api/v1/token-launch/fee-share/create-config";
-    // configTxRes = await fetchWithRetry(... mesmo body);
+      responseDiv.innerHTML = 'Carregando... (aguarde 5-10s)';
 
-    let serializedTx = configTxRes.response;  // assume direto base58
-    if (configTxRes.response && configTxRes.response.transaction) {
-      serializedTx = configTxRes.response.transaction;
+      const url = `https://public-api-v2.bags.fm/api/v1${endpoint}`;
+      const options = {
+        method: method,
+        headers: {
+          'x-api-key': apiKey
+        }
+      };
+
+      if (method === 'POST' && bodyText) {
+        try {
+          const jsonBody = JSON.parse(bodyText);
+          options.headers['Content-Type'] = 'application/json';
+          options.body = JSON.stringify(jsonBody);
+        } catch (e) {
+          responseDiv.innerHTML = `<span class="error">Erro no JSON do body: ${e.message}</span>`;
+          return;
+        }
+      }
+
+      try {
+        const res = await fetch(url, options);
+        const text = await res.text();
+
+        let content = `Status: ${res.status} ${res.statusText}\n`;
+        content += `URL: ${url}\n`;
+        content += `Headers de resposta:\n`;
+        res.headers.forEach((v, k) => { content += `  ${k}: ${v}\n`; });
+
+        content += `\nBody:\n${text.substring(0, 2000)}${text.length > 2000 ? '...\n(truncado)' : ''}`;
+
+        const className = res.ok ? 'success' : 'error';
+        responseDiv.innerHTML = `<div class="${className}">${content}</div>`;
+      } catch (err) {
+        responseDiv.innerHTML = `<span class="error">Erro na requisição: ${err.message}</span>`;
+      }
     }
-    log("Tx serializada recebida (preview): " + serializedTx.substring(0, 50) + "...");
-
-    const configTx = Transaction.from(bs58.decode(serializedTx));
-    const signedConfigTx = await provider.signTransaction(configTx);
-    const configSig = await connection.sendRawTransaction(signedConfigTx.serialize(), { skipPreflight: false });
-    await connection.confirmTransaction(configSig, "confirmed");
-    log("✅ Fee Share Config tx confirmada: " + configSig);
-
-    // Derivar PDA configKey
-    const [configKeyPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("fee_share_config"), new PublicKey(mintStr).toBuffer()],
-      FEE_SHARE_PROGRAM_ID
-    );
-    const configKey = configKeyPda.toBase58();
-    log("✅ Config Key (PDA): " + configKey);
-
-    log("Passo 2: Criando launch transaction...");
-    const launch = await fetchWithRetry(
-      "https://public-api-v2.bags.fm/api/v1/token-launch/create-launch-transaction",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
-        body: JSON.stringify({
-          tokenMint: mintStr,
-          metadataUrl: metadataUrl,
-          payer: wallet.toBase58(),
-          initialBuyLamports: buyLamports,
-          configKey: configKey
-          // opcional: tipWallet, tipLamports
-        })
-      }
-    );
-
-    const launchTx = Transaction.from(bs58.decode(launch.response));
-    const signedLaunch = await provider.signTransaction(launchTx);
-    const launchSig = await connection.sendRawTransaction(signedLaunch.serialize());
-    await connection.confirmTransaction(launchSig, "confirmed");
-
-    log("✅ DEPLOY CONCLUÍDO!");
-    log("Launch Tx: " + launchSig);
-    log("Token: https://bags.fm/" + mintStr);
-  } catch (err) {
-    log("❌ ERRO REAL: " + (err.message || err.stack || err), true);
-  }
-};
-</script>
+  </script>
 </body>
 </html>
