@@ -3,184 +3,190 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Bags.fm Token Deploy (Completo)</title>
+  <title>Bags.fm Token Deploy (Corrigido)</title>
+
   <style>
-    body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; padding: 20px; }
+    body { font-family: Arial, sans-serif; max-width: 720px; margin: 40px auto; padding: 20px; }
     label { display: block; margin: 12px 0 4px; font-weight: bold; }
-    input, textarea, button, select { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; }
-    button { background: #007bff; color: white; border: none; cursor: pointer; font-size: 16px; }
-    button:disabled { background: #ccc; cursor: not-allowed; }
-    #status { margin-top: 20px; padding: 15px; border-radius: 8px; background: #f0f8ff; white-space: pre-wrap; font-family: monospace; overflow-y: auto; max-height: 600px; }
+    input, textarea, button { width: 100%; padding: 10px; margin-bottom: 10px; }
+    button { background: #007bff; color: #fff; border: none; font-size: 16px; cursor: pointer; }
+    button:disabled { background: #aaa; }
+    #status {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f0f8ff;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      font-family: monospace;
+      max-height: 500px;
+      overflow-y: auto;
+    }
     .error { background: #ffebee; color: #c62828; }
   </style>
+
   <script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
   <script src="https://unpkg.com/bs58@5.0.0/dist/index.min.js"></script>
 </head>
+
 <body>
-  <h1>Deploy Token no Bags.fm</h1>
-  <p>Preencha tudo. Clique em Deploy → assine os pop-ups na Phantom (pode ter 2 tx: fee config + launch). Tenha SOL suficiente (~0.1-0.3 SOL).</p>
 
-  <button id="connectWalletBtn">Conectar Wallet (Phantom)</button>
-  <p id="walletStatus">Wallet: não conectada</p>
+<h1>Deploy Token no Bags.fm</h1>
 
-  <form id="tokenForm">
-    <label for="apiKey">API Key (de dev.bags.fm):</label>
-    <input type="text" id="apiKey" placeholder="bags_..." required />
+<button id="connectWalletBtn">Conectar Phantom</button>
+<p id="walletStatus">Wallet: não conectada</p>
 
-    <label for="name">Nome do Token:</label>
-    <input type="text" id="name" placeholder="TESTE" required />
+<form id="tokenForm">
+  <label>API Key (bags.fm)</label>
+  <input id="apiKey" required>
 
-    <label for="symbol">Símbolo:</label>
-    <input type="text" id="symbol" placeholder="TEST" maxlength="8" required />
+  <label>Nome do Token</label>
+  <input id="name" required>
 
-    <label for="description">Descrição:</label>
-    <textarea id="description" rows="3" placeholder="Token de teste" required></textarea>
+  <label>Símbolo</label>
+  <input id="symbol" maxlength="8" required>
 
-    <label for="imageFile">Imagem (PNG/JPG):</label>
-    <input type="file" id="imageFile" accept="image/*" required />
+  <label>Descrição</label>
+  <textarea id="description" rows="3"></textarea>
 
-    <label for="initialBuy">Compra inicial (SOL, opcional):</label>
-    <input type="number" id="initialBuy" step="0.001" min="0" value="0" />
+  <label>Imagem</label>
+  <input type="file" id="imageFile" accept="image/*" required>
 
-    <button type="submit" disabled id="submitBtn">Criar + Deploy</button>
-  </form>
+  <label>Compra inicial (SOL)</label>
+  <input type="number" id="initialBuy" step="0.001" value="0">
 
-  <div id="status">Aguardando ação...</div>
+  <button id="submitBtn" disabled>Criar e Deploy</button>
+</form>
 
-  <script>
-    const { Connection, PublicKey, Transaction, LAMPORTS_PER_SOL } = solanaWeb3;
-    const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+<div id="status">Aguardando ação...</div>
 
-    const statusDiv = document.getElementById('status');
-    const walletStatus = document.getElementById('walletStatus');
-    const connectBtn = document.getElementById('connectWalletBtn');
-    const submitBtn = document.getElementById('submitBtn');
+<script>
+const { Connection, PublicKey, Transaction, LAMPORTS_PER_SOL } = solanaWeb3;
+const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
 
-    let publicKey = null;
-    let provider = null;
+let provider, publicKey;
 
-    function logStatus(msg, isError = false) {
-      console.log('[DEBUG]', msg);
-      statusDiv.innerHTML += `<br>${isError ? '<span style="color:red;">' : ''}${msg}${isError ? '</span>' : ''}`;
-      statusDiv.scrollTop = statusDiv.scrollHeight;
-      if (isError) statusDiv.className = 'error';
-    }
+const statusDiv = document.getElementById("status");
+const walletStatus = document.getElementById("walletStatus");
+const submitBtn = document.getElementById("submitBtn");
 
-    function getPhantomProvider() {
-      return window.phantom?.solana || (window.solana?.isPhantom ? window.solana : null);
-    }
+function log(msg, error=false) {
+  statusDiv.innerHTML += "\n" + msg;
+  if (error) statusDiv.classList.add("error");
+  statusDiv.scrollTop = statusDiv.scrollHeight;
+}
 
-    connectBtn.addEventListener('click', async () => {
-      logStatus('Tentando conectar Phantom...');
-      provider = getPhantomProvider();
-      if (!provider) return logStatus('Phantom não detectada!', true);
-      try {
-        await provider.connect();
-        publicKey = new PublicKey(provider.publicKey.toString());
-        walletStatus.textContent = `Wallet conectada: ${publicKey.toBase58().slice(0,6)}...`;
-        submitBtn.disabled = false;
-        logStatus(`✅ Conectado! PublicKey: ${publicKey.toBase58()}`);
-      } catch (err) {
-        logStatus(`Erro na conexão: ${err.message}`, true);
+document.getElementById("connectWalletBtn").onclick = async () => {
+  provider = window.phantom?.solana;
+  if (!provider) return log("❌ Phantom não detectada", true);
+
+  await provider.connect();
+  publicKey = new PublicKey(provider.publicKey.toString());
+  walletStatus.innerText = `Wallet: ${publicKey.toBase58()}`;
+  submitBtn.disabled = false;
+  log("✅ Wallet conectada");
+};
+
+document.getElementById("tokenForm").onsubmit = async (e) => {
+  e.preventDefault();
+
+  try {
+    const apiKey = apiKey.value.trim();
+    const name = name.value.trim();
+    const symbol = symbol.value.trim().toUpperCase();
+    const description = description.value.trim() || "Token";
+    const image = imageFile.files[0];
+    const initialBuyLamports = Math.floor((+initialBuy.value || 0) * LAMPORTS_PER_SOL);
+
+    /* PASSO 1 — METADATA */
+    log("🚀 Passo 1: Criando metadata...");
+    const fd = new FormData();
+    fd.append("name", name);
+    fd.append("symbol", symbol);
+    fd.append("description", description);
+    fd.append("image", image);
+
+    const infoRes = await fetch(
+      "https://public-api-v2.bags.fm/api/v1/token-launch/create-token-info",
+      { method: "POST", headers: { "x-api-key": apiKey }, body: fd }
+    );
+
+    const info = await infoRes.json();
+    if (!info.success) throw info;
+
+    const tokenMint = info.response.tokenMint;
+    const metadataUrl = info.response.tokenMetadata;
+
+    log("✅ Mint: " + tokenMint);
+
+    /* PASSO 2 — FEE CONFIG (CORRIGIDO) */
+    log("⚙️ Passo 2: Configurando fee share...");
+
+    const feeBody = {
+      launchWallet: publicKey.toBase58(),
+      tokenMint: tokenMint,
+      feeShare: [
+        { wallet: publicKey.toBase58(), bps: 10000 }
+      ]
+    };
+
+    const feeRes = await fetch(
+      "https://public-api-v2.bags.fm/api/v1/token-launch/create-config",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey
+        },
+        body: JSON.stringify(feeBody)
       }
-    });
+    );
 
-    document.getElementById('tokenForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (!publicKey || !provider) return logStatus('Conecte a wallet primeiro!', true);
+    const feeData = await feeRes.json();
+    if (!feeRes.ok) throw feeData;
 
-      const apiKey = document.getElementById('apiKey').value.trim();
-      if (!apiKey) return logStatus('API Key obrigatória!', true);
+    const feeTx = Transaction.from(bs58.decode(feeData.response));
+    const signedFee = await provider.signTransaction(feeTx);
+    const feeSig = await connection.sendRawTransaction(signedFee.serialize());
+    await connection.confirmTransaction(feeSig);
+    log("✅ Fee config tx: " + feeSig);
 
-      const name = document.getElementById('name').value.trim();
-      const symbol = document.getElementById('symbol').value.trim().toUpperCase();
-      let description = document.getElementById('description').value.trim() || "Token de teste";
-      const imageFile = document.getElementById('imageFile').files[0];
-      const initialBuySol = parseFloat(document.getElementById('initialBuy').value) || 0;
-      const initialBuyLamports = Math.floor(initialBuySol * LAMPORTS_PER_SOL);
+    /* PASSO 3 — LAUNCH */
+    log("🔥 Passo 3: Launch token...");
 
-      if (!name || !symbol || !imageFile) return logStatus('Preencha todos os campos obrigatórios!', true);
-
-      try {
-        logStatus('Passo 1: Criando token info/metadata...');
-        const formData = new FormData();
-        formData.append('name', name);
-        formData.append('symbol', symbol);
-        formData.append('description', description);
-        formData.append('image', imageFile);
-
-        const infoRes = await fetch('https://public-api-v2.bags.fm/api/v1/token-launch/create-token-info', {
-          method: 'POST',
-          headers: { 'x-api-key': apiKey },
-          body: formData
-        });
-        const infoData = await infoRes.json();
-        logStatus(`Resposta info (HTTP ${infoRes.status}): ${JSON.stringify(infoData, null, 2)}`);
-
-        if (!infoRes.ok || !infoData.success) throw new Error(infoData.error || 'Falha Passo 1');
-
-        const tokenMint = new PublicKey(infoData.response.tokenMint);
-        const metadataUrl = infoData.response.tokenMetadata;
-        logStatus(`✅ Mint: ${tokenMint.toBase58()}`);
-
-        // Passo 2: Criar fee share config (100% pra você)
-        logStatus('Passo 2: Configurando fee share...');
-        const feeBody = {
+    const launchRes = await fetch(
+      "https://public-api-v2.bags.fm/api/v1/token-launch/create-launch-transaction",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey
+        },
+        body: JSON.stringify({
           payer: publicKey.toBase58(),
-          baseMint: tokenMint.toBase58(),
-          feeClaimers: [{ user: publicKey.toBase58(), userBps: 10000 }]
-        };
-        const feeRes = await fetch('https://public-api-v2.bags.fm/api/v1/token-launch/create-config', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey
-          },
-          body: JSON.stringify(feeBody)
-        });
-        const feeData = await feeRes.json();
-        logStatus(`Resposta fee (HTTP ${feeRes.status}): ${JSON.stringify(feeData, null, 2)}`);
-        if (!feeRes.ok) throw new Error(feeData.error || 'Falha fee config');
-
-        // Assumindo que response é base58 serialized tx
-        const configTx = Transaction.from(bs58.decode(feeData.response));
-        const signedConfig = await provider.signTransaction(configTx);
-        const configSig = await connection.sendRawTransaction(signedConfig.serialize(), { skipPreflight: true });
-        await connection.confirmTransaction(configSig, 'confirmed');
-        logStatus(`✅ Fee config assinada: ${configSig}`);
-
-        // Passo 3: Criar e assinar launch tx
-        logStatus('Passo 3: Gerando launch transaction...');
-        const launchBody = {
-          metadataUrl: metadataUrl,
-          tokenMint: tokenMint.toBase58(),
-          payer: publicKey.toBase58(),
+          tokenMint,
+          metadataUrl,
           initialBuyLamports
-        };
-        const launchRes = await fetch('https://public-api-v2.bags.fm/api/v1/token-launch/create-launch-transaction', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey
-          },
-          body: JSON.stringify(launchBody)
-        });
-        const launchData = await launchRes.json();
-        logStatus(`Resposta launch (HTTP ${launchRes.status}): ${JSON.stringify(launchData, null, 2)}`);
-        if (!launchRes.ok) throw new Error(launchData.error || 'Falha launch tx');
-
-        const launchTx = Transaction.from(bs58.decode(launchData.response));
-        const signedLaunch = await provider.signTransaction(launchTx);
-        const launchSig = await connection.sendRawTransaction(signedLaunch.serialize(), { skipPreflight: true });
-        await connection.confirmTransaction(launchSig, 'confirmed');
-        logStatus(`✅ Deploy concluído! Tx: ${launchSig}`);
-        logStatus(`Explorer: https://solana.fm/tx/${launchSig}`);
-        logStatus(`Token no Bags: https://bags.fm/${tokenMint.toBase58()}`);
-
-      } catch (err) {
-        logStatus(`ERRO: ${err.message || err}`, true);
+        })
       }
-    });
-  </script>
+    );
+
+    const launchData = await launchRes.json();
+    if (!launchRes.ok) throw launchData;
+
+    const launchTx = Transaction.from(bs58.decode(launchData.response));
+    const signedLaunch = await provider.signTransaction(launchTx);
+    const sig = await connection.sendRawTransaction(signedLaunch.serialize());
+    await connection.confirmTransaction(sig);
+
+    log("🎉 DEPLOY CONCLUÍDO!");
+    log("TX: " + sig);
+    log("https://bags.fm/" + tokenMint);
+
+  } catch (err) {
+    log("❌ ERRO:\n" + JSON.stringify(err, null, 2), true);
+  }
+};
+</script>
+
 </body>
 </html>
