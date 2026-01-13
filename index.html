@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Bags.fm Token Deploy (File Upload Fix)</title>
+  <title>Bags.fm Token Deploy (Descrição Corrigida)</title>
   <style>
     body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; padding: 20px; }
     label { display: block; margin: 12px 0 4px; font-weight: bold; }
@@ -17,16 +17,16 @@
   <script src="https://unpkg.com/bs58@5.0.0/dist/index.min.js"></script>
 </head>
 <body>
-  <h1>Deploy Token no Bags.fm (Sem instalação!)</h1>
-  <p>Upload uma imagem PNG/JPG pequena. Use API Key nova de https://dev.bags.fm (conecte sua wallet lá primeiro).</p>
+  <h1>Deploy Token no Bags.fm (Teste no Vercel)</h1>
+  <p>Preencha a descrição (obrigatória). Use uma imagem pequena (PNG/JPG). API Key nova de https://dev.bags.fm.</p>
 
   <button id="connectWalletBtn">Conectar Wallet (Phantom)</button>
   <p id="walletStatus">Wallet: não conectada</p>
 
   <form id="tokenForm">
-    <label for="authType">Tipo de Auth (teste os dois):</label>
+    <label for="authType">Tipo de autenticação:</label>
     <select id="authType">
-      <option value="x-api-key">x-api-key (padrão docs)</option>
+      <option value="x-api-key">x-api-key (recomendado)</option>
       <option value="Bearer">Authorization Bearer</option>
     </select>
 
@@ -36,16 +36,16 @@
     <label for="name">Nome do Token:</label>
     <input type="text" id="name" placeholder="TEST" required />
 
-    <label for="symbol">Símbolo:</label>
+    <label for="symbol">Símbolo (máx 8 letras):</label>
     <input type="text" id="symbol" placeholder="TEST" maxlength="8" required />
 
-    <label for="description">Descrição:</label>
-    <textarea id="description" rows="3" placeholder="nada"></textarea>
+    <label for="description">Descrição (obrigatória):</label>
+    <textarea id="description" rows="3" placeholder="Token de teste criado via HTML" required></textarea>
 
-    <label for="imageFile">Imagem (PNG/JPG, < 2MB):</label>
+    <label for="imageFile">Imagem do Token (PNG/JPG):</label>
     <input type="file" id="imageFile" accept="image/*" required />
 
-    <label for="initialBuy">Compra inicial (SOL, opcional):</label>
+    <label for="initialBuy">Compra inicial em SOL (opcional):</label>
     <input type="number" id="initialBuy" step="0.001" min="0" value="0" />
 
     <button type="submit" disabled id="submitBtn">Criar + Deploy</button>
@@ -79,7 +79,7 @@
     connectBtn.addEventListener('click', async () => {
       logStatus('Tentando conectar Phantom...');
       provider = getPhantomProvider();
-      if (!provider) return logStatus('Phantom não detectada! Instale/atualize.', true);
+      if (!provider) return logStatus('Phantom não detectada!', true);
       try {
         await provider.connect();
         publicKey = new PublicKey(provider.publicKey.toString());
@@ -87,7 +87,7 @@
         submitBtn.disabled = false;
         logStatus(`✅ Conectado! PublicKey: ${publicKey.toBase58()}`);
       } catch (err) {
-        logStatus(`Erro connect: ${err.message}`, true);
+        logStatus(`Erro na conexão: ${err.message}`, true);
       }
     });
 
@@ -101,20 +101,24 @@
 
       const name = document.getElementById('name').value.trim();
       const symbol = document.getElementById('symbol').value.trim().toUpperCase();
-      const description = document.getElementById('description').value.trim();
+      let description = document.getElementById('description').value.trim();
       const imageFile = document.getElementById('imageFile').files[0];
       const initialBuySol = parseFloat(document.getElementById('initialBuy').value) || 0;
 
-      if (!imageFile) return logStatus('Selecione uma imagem!', true);
+      // Força string vazia ou padrão se descrição estiver vazia
+      if (!description) description = "Token de teste criado via HTML";
 
-      logStatus(`Usando auth: ${authType === 'Bearer' ? 'Bearer' : 'x-api-key'}`);
+      if (!name || !symbol || !imageFile) return logStatus('Preencha todos os campos obrigatórios!', true);
+
+      logStatus(`Usando autenticação: ${authType === 'Bearer' ? 'Bearer' : 'x-api-key'}`);
 
       try {
         logStatus('Passo 1: Enviando token info com upload de imagem...');
+
         const formData = new FormData();
         formData.append('name', name);
         formData.append('symbol', symbol);
-        if (description) formData.append('description', description);
+        formData.append('description', description);
         formData.append('image', imageFile);
 
         let headers = {};
@@ -133,10 +137,20 @@
         const infoData = await infoRes.json();
         logStatus(`Resposta (HTTP ${infoRes.status}): ${JSON.stringify(infoData, null, 2)}`);
 
-        if (!infoRes.ok || !infoData.success) throw new Error(infoData.error || infoData.message || 'Falha no Passo 1');
+        if (!infoRes.ok || !infoData.success) {
+          throw new Error(infoData.error || infoData.message || `Falha no Passo 1 (HTTP ${infoRes.status})`);
+        }
 
-        logStatus('✅ Passo 1 OK! Token info criada.');
-        logStatus('Próximos passos: fee config + deploy tx (adicione aqui se quiser continuar).');
+        const tokenMint = infoData.response?.tokenMint;
+        const metadataUrl = infoData.response?.tokenMetadata;
+
+        logStatus(`✅ Token info criada com sucesso!`);
+        logStatus(`Mint: ${tokenMint || 'não retornado'}`);
+        logStatus(`Metadata: ${metadataUrl || 'não retornado'}`);
+
+        // Aqui você pode adicionar os próximos passos (fee config + launch tx)
+        // Exemplo placeholder:
+        logStatus('Próximo: Configurar fee share e deploy on-chain (adicione os fetches semelhantes aqui).');
 
       } catch (err) {
         logStatus(`ERRO: ${err.message || err}`, true);
