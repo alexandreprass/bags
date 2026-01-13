@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Criar e Deployar Token no Bags.fm (Phantom Fix 2026)</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; padding: 20px; }
+    label { display: block; margin: 12px 0 4px; font-weight: bold; }
+    input, textarea, button { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; }
+    button { background: #007bff; color: white; border: none; cursor: pointer; font-size: 16px; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    #status { margin-top: 20px; padding: 15px; border-radius: 8px; background: #f0f8ff; white-space: pre-wrap; font-family: monospace; overflow-y: auto; max-height: 400px; }
+    .error { background: #ffebee; color: #c62828; }
+  </style>
+  <script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
+</head>
+<body>
+  <h1>Criar e Deployar Token no Bags.fm</h1>
+  <p>Abra o Console (F12 → Console) para logs detalhados. Certifique-se de que a Phantom está instalada, desbloqueada e atualizada. Teste em HTTPS se possível (Live Server com HTTPS ou Vercel).</p>
+
+  <button id="connectWalletBtn">Conectar Wallet (Phantom)</button>
+  <p id="walletStatus">Wallet: não conectada</p>
+
+  <form id="tokenForm">
+    <label for="apiKey">API Key Bags.fm:</label>
+    <input type="text" id="apiKey" placeholder="bags_..." required />
+
+    <label for="name">Nome do Token:</label>
+    <input type="text" id="name" placeholder="TEST" required />
+
+    <label for="symbol">Símbolo:</label>
+    <input type="text" id="symbol" placeholder="TEST" maxlength="8" required />
+
+    <label for="description">Descrição:</label>
+    <textarea id="description" rows="3" placeholder="nada"></textarea>
+
+    <label for="imageUrl">URL da Imagem (obrigatória):</label>
+    <input type="url" id="imageUrl" placeholder="https://i.imgur.com/..." required />
+
+    <label for="initialBuy">Compra inicial (SOL, opcional):</label>
+    <input type="number" id="initialBuy" step="0.001" min="0" value="0" />
+
+    <button type="submit" disabled id="submitBtn">Criar + Deploy</button>
+  </form>
+
+  <div id="status">Aguardando ação... Abra console (F12) para mais detalhes.</div>
+
+  <script>
+    const { Connection, PublicKey, Transaction, LAMPORTS_PER_SOL } = solanaWeb3;
+    const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+
+    const statusDiv = document.getElementById('status');
+    const walletStatus = document.getElementById('walletStatus');
+    const connectBtn = document.getElementById('connectWalletBtn');
+    const submitBtn = document.getElementById('submitBtn');
+
+    let publicKey = null;
+    let provider = null;
+
+    function logStatus(msg, isError = false) {
+      console.log('[DEBUG]', msg);
+      statusDiv.innerHTML += `<br>${isError ? '<span style="color:red;">' : ''}${msg}${isError ? '</span>' : ''}`;
+      statusDiv.scrollTop = statusDiv.scrollHeight;
+      if (isError) statusDiv.className = 'error';
+    }
+
+    // Função para detectar provider Phantom
+    function getPhantomProvider() {
+      if (window.phantom?.solana) {
+        return window.phantom.solana;
+      }
+      if (window.solana?.isPhantom) {
+        return window.solana;
+      }
+      return null;
+    }
+
+    connectBtn.addEventListener('click', async () => {
+      logStatus('Tentando detectar e conectar Phantom...');
+
+      provider = getPhantomProvider();
+
+      if (!provider) {
+        logStatus('Phantom NÃO detectada! Verifique: extensão instalada? Atualizada? Recarregue a página. Ou tente em HTTPS (não file:// ou http://).', true);
+        logStatus('Dica: Abra https://phantom.app/download para confirmar instalação.', true);
+        return;
+      }
+
+      logStatus('Provider Phantom encontrado! Tentando connect...');
+
+      try {
+        const resp = await provider.connect();
+        publicKey = new PublicKey(resp.publicKey.toString());
+        walletStatus.textContent = `Wallet conectada: ${publicKey.toBase58().slice(0,6)}...${publicKey.toBase58().slice(-4)}`;
+        submitBtn.disabled = false;
+        logStatus(`✅ Conectado com sucesso! PublicKey: ${publicKey.toBase58()}`);
+      } catch (err) {
+        logStatus(`Erro na conexão: ${err.message || err} (código: ${err.code || 'sem código'})`, true);
+        if (err.code === 4001) {
+          logStatus('Usuário rejeitou a conexão. Tente novamente clicando em Connect.', true);
+        }
+      }
+    });
+
+    // Auto-detect on load (opcional, para eager connect se trusted)
+    window.addEventListener('load', () => {
+      provider = getPhantomProvider();
+      if (provider && provider.isConnected) {
+        logStatus('Wallet já conectada (eager connect).');
+        publicKey = new PublicKey(provider.publicKey.toString());
+        walletStatus.textContent = `Wallet conectada: ${publicKey.toBase58().slice(0,6)}...${publicKey.toBase58().slice(-4)}`;
+        submitBtn.disabled = false;
+      }
+    });
+
+    // O resto do form submit continua igual (adicione os passos de API se quiser testar deploy)
+    document.getElementById('tokenForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!publicKey || !provider) return logStatus('Conecte a wallet primeiro!', true);
+      logStatus('Iniciando deploy... (implemente os fetches aqui se quiser testar API calls)');
+      // ... insira o código de create-token-info, fee-share, launch tx como nas versões anteriores
+    });
+  </script>
+</body>
+</html>
